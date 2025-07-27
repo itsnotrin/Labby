@@ -19,7 +19,7 @@ struct SettingsView: View {
             Form {
                 Section {
                     Toggle("Use System Appearance", isOn: $appearanceManager.useSystemAppearance)
-                        .tint(.accentColor)
+                        .tint(.green)
 
                     if !appearanceManager.useSystemAppearance {
                         Picker("Appearance", selection: $appearanceManager.selectedAppearance) {
@@ -43,6 +43,7 @@ struct SettingsView: View {
                             Image(systemName: "chart.bar.fill")
                         }
                     }
+                    .tint(.green)
 
                     VStack(alignment: .leading, spacing: 8) {
                         Label {
