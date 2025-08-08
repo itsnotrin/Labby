@@ -11,6 +11,7 @@ enum ServiceKind: String, Codable, CaseIterable, Identifiable {
     case proxmox
     case jellyfin
     case qbittorrent
+    case pihole
 
     var id: String { rawValue }
 
@@ -19,6 +20,7 @@ enum ServiceKind: String, Codable, CaseIterable, Identifiable {
         case .proxmox: return "Proxmox"
         case .jellyfin: return "Jellyfin"
         case .qbittorrent: return "qBittorrent"
+        case .pihole: return "Pi-hole"
         }
     }
 }
@@ -26,7 +28,7 @@ enum ServiceKind: String, Codable, CaseIterable, Identifiable {
 enum AuthMethodType: String, Codable, CaseIterable, Identifiable {
     case apiToken
     case usernamePassword
-    case proxmoxToken // tokenId + tokenSecret
+    case proxmoxToken  // tokenId + tokenSecret
 
     var id: String { rawValue }
 

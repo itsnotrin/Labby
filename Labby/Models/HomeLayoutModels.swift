@@ -63,19 +63,36 @@ enum QBittorrentMetric: String, Codable, CaseIterable, Identifiable {
     public var id: String { rawValue }
 }
 
+// New: Pi-hole widget metrics
+enum PiHoleMetric: String, Codable, CaseIterable, Identifiable {
+    // Commonly useful fields
+    case dnsQueriesToday
+    case adsBlockedToday
+    case adsPercentageToday
+    case uniqueClients
+    case queriesForwarded
+    case queriesCached
+    case domainsBeingBlocked
+    case gravityLastUpdatedRelative
+    case blockingStatus
+
+    public var id: String { rawValue }
+}
+
 // MARK: - Widget Metric Selection
 
 enum WidgetMetricsSelection: Codable, Equatable {
     case proxmox([ProxmoxMetric])
     case jellyfin([JellyfinMetric])
     case qbittorrent([QBittorrentMetric])
+    case pihole([PiHoleMetric])
 
     private enum CodingKeys: String, CodingKey {
-        case type, proxmox, jellyfin, qbittorrent
+        case type, proxmox, jellyfin, qbittorrent, pihole
     }
 
     private enum Discriminator: String, Codable {
-        case proxmox, jellyfin, qbittorrent
+        case proxmox, jellyfin, qbittorrent, pihole
     }
 
     public init(from decoder: Decoder) throws {
@@ -91,6 +108,9 @@ enum WidgetMetricsSelection: Codable, Equatable {
         case .qbittorrent:
             let metrics = try container.decode([QBittorrentMetric].self, forKey: .qbittorrent)
             self = .qbittorrent(metrics)
+        case .pihole:
+            let metrics = try container.decode([PiHoleMetric].self, forKey: .pihole)
+            self = .pihole(metrics)
         }
     }
 
@@ -106,6 +126,9 @@ enum WidgetMetricsSelection: Codable, Equatable {
         case .qbittorrent(let metrics):
             try container.encode(Discriminator.qbittorrent, forKey: .type)
             try container.encode(metrics, forKey: .qbittorrent)
+        case .pihole(let metrics):
+            try container.encode(Discriminator.pihole, forKey: .type)
+            try container.encode(metrics, forKey: .pihole)
         }
     }
 }
@@ -189,13 +212,52 @@ struct QBittorrentStats: Codable, Equatable {
     }
 }
 
+// New: Pi-hole compact stats for widgets
+public struct PiHoleStats: Codable, Equatable {
+    public var status: String?
+    public var domainsBeingBlocked: Int
+    public var dnsQueriesToday: Int
+    public var adsBlockedToday: Int
+    public var adsPercentageToday: Double
+    public var uniqueClients: Int
+    public var queriesForwarded: Int
+    public var queriesCached: Int
+    public var gravityLastUpdatedRelative: String?
+    public var gravityLastUpdatedAbsolute: Int?
+
+    public init(
+        status: String?,
+        domainsBeingBlocked: Int,
+        dnsQueriesToday: Int,
+        adsBlockedToday: Int,
+        adsPercentageToday: Double,
+        uniqueClients: Int,
+        queriesForwarded: Int,
+        queriesCached: Int,
+        gravityLastUpdatedRelative: String?,
+        gravityLastUpdatedAbsolute: Int?
+    ) {
+        self.status = status
+        self.domainsBeingBlocked = domainsBeingBlocked
+        self.dnsQueriesToday = dnsQueriesToday
+        self.adsBlockedToday = adsBlockedToday
+        self.adsPercentageToday = adsPercentageToday
+        self.uniqueClients = uniqueClients
+        self.queriesForwarded = queriesForwarded
+        self.queriesCached = queriesCached
+        self.gravityLastUpdatedRelative = gravityLastUpdatedRelative
+        self.gravityLastUpdatedAbsolute = gravityLastUpdatedAbsolute
+    }
+}
+
 enum ServiceStatsPayload: Codable, Equatable {
     case proxmox(ProxmoxStats)
     case jellyfin(JellyfinStats)
     case qbittorrent(QBittorrentStats)
+    case pihole(PiHoleStats)
 
-    private enum CodingKeys: String, CodingKey { case type, proxmox, jellyfin, qbittorrent }
-    private enum Discriminator: String, Codable { case proxmox, jellyfin, qbittorrent }
+    private enum CodingKeys: String, CodingKey { case type, proxmox, jellyfin, qbittorrent, pihole }
+    private enum Discriminator: String, Codable { case proxmox, jellyfin, qbittorrent, pihole }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -206,6 +268,8 @@ enum ServiceStatsPayload: Codable, Equatable {
             self = .jellyfin(try c.decode(JellyfinStats.self, forKey: .jellyfin))
         case .qbittorrent:
             self = .qbittorrent(try c.decode(QBittorrentStats.self, forKey: .qbittorrent))
+        case .pihole:
+            self = .pihole(try c.decode(PiHoleStats.self, forKey: .pihole))
         }
     }
 
@@ -221,6 +285,9 @@ enum ServiceStatsPayload: Codable, Equatable {
         case .qbittorrent(let s):
             try c.encode(Discriminator.qbittorrent, forKey: .type)
             try c.encode(s, forKey: .qbittorrent)
+        case .pihole(let s):
+            try c.encode(Discriminator.pihole, forKey: .type)
+            try c.encode(s, forKey: .pihole)
         }
     }
 }
@@ -241,6 +308,9 @@ struct HomeWidget: Identifiable, Codable, Equatable {
     public var titleOverride: String?
     public var metrics: WidgetMetricsSelection
 
+    // Refresh
+    public var refreshIntervalOverride: Double?
+
     public init(
         id: UUID = UUID(),
         serviceId: UUID,
@@ -248,10 +318,12 @@ struct HomeWidget: Identifiable, Codable, Equatable {
         row: Int,
         column: Int,
         titleOverride: String? = nil,
-        metrics: WidgetMetricsSelection
+        metrics: WidgetMetricsSelection,
+        refreshIntervalOverride: Double? = nil
     ) {
         self.id = id
         self.serviceId = serviceId
+        self.refreshIntervalOverride = refreshIntervalOverride
         self.size = size
         self.row = max(0, row)
         self.column = max(0, min(1, column))  // clamp to 2-column grid
@@ -383,6 +455,17 @@ enum HomeLayoutDefaults {
             return .jellyfin([.tvShowsCount, .moviesCount])
         case .qbittorrent:
             return .qbittorrent([.seedingCount, .downloadingCount])
+        case .pihole:
+            if size == .large {
+                // Large default: broader overview
+                return .pihole([
+                    .dnsQueriesToday, .adsBlockedToday, .adsPercentageToday, .uniqueClients,
+                    .queriesForwarded, .queriesCached, .blockingStatus,
+                ])
+            } else {
+                // Small default: simple blocked vs total percentage
+                return .pihole([.blockingStatus, .adsBlockedToday, .adsPercentageToday])
+            }
         }
     }
 

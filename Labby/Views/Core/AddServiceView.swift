@@ -54,6 +54,8 @@ struct AddServiceView: View {
                             authMethod = .usernamePassword
                         case .qbittorrent:
                             authMethod = .usernamePassword
+                        case .pihole:
+                            authMethod = .usernamePassword
                         }
                         // Changing service type requires re-test
                         testAttempted = false
@@ -96,16 +98,18 @@ struct AddServiceView: View {
 
                     switch authMethod {
                     case .usernamePassword:
-                        TextField("Username", text: $username)
-                            .textContentType(.username)
-                            .autocapitalization(.none)
-                            .autocorrectionDisabled()
-                            .onChange(of: username) { _ in
-                                testAttempted = false
-                                testPassed = false
-                                testResult = nil
-                                testError = nil
-                            }
+                        if selectedService != .pihole {
+                            TextField("Username", text: $username)
+                                .textContentType(.username)
+                                .autocapitalization(.none)
+                                .autocorrectionDisabled()
+                                .onChange(of: username) { _ in
+                                    testAttempted = false
+                                    testPassed = false
+                                    testResult = nil
+                                    testError = nil
+                                }
+                        }
 
                         SecureField("Password", text: $password)
                             .textContentType(.password)
@@ -217,6 +221,8 @@ struct AddServiceView: View {
             return [.usernamePassword, .apiToken]
         case .qbittorrent:
             return [.usernamePassword]
+        case .pihole:
+            return [.usernamePassword]
         }
     }
 
@@ -229,7 +235,11 @@ struct AddServiceView: View {
     private var authFieldsValid: Bool {
         switch authMethod {
         case .usernamePassword:
-            return !username.trimmingCharacters(in: .whitespaces).isEmpty && !password.isEmpty
+            if selectedService == .pihole {
+                return !password.isEmpty
+            } else {
+                return !username.trimmingCharacters(in: .whitespaces).isEmpty && !password.isEmpty
+            }
         case .apiToken:
             return !apiToken.isEmpty
         case .proxmoxToken:

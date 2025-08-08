@@ -179,6 +179,8 @@ struct ServiceRowView: View {
             return Image(systemName: "tv")
         case .qbittorrent:
             return Image(systemName: "arrow.down.circle")
+        case .pihole:
+            return Image(systemName: "shield.lefthalf.filled")
         }
     }
 }

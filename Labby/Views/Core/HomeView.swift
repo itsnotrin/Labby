@@ -11,9 +11,11 @@ struct HomeView: View {
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var serviceManager = ServiceManager.shared
     @StateObject private var layoutStore = HomeLayoutStore.shared
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage("autoRefreshInterval") private var autoRefreshInterval = 30.0
     @AppStorage("showServiceStats") private var showServiceStats = true
     @State private var refreshTask: Task<Void, Never>? = nil
+    @State private var lastFetchByWidget: [UUID: Date] = [:]
 
     @State private var homes: [String] =
         UserDefaults.standard.stringArray(forKey: "homes") ?? ["Default Home"]
@@ -221,6 +223,17 @@ struct HomeView: View {
         .onChange(of: selectedHome) { _ in
             restartRefreshTask()
         }
+        .onChange(of: scenePhase) { phase in
+            switch phase {
+            case .active:
+                restartRefreshTask()
+            case .background, .inactive:
+                refreshTask?.cancel()
+                refreshTask = nil
+            @unknown default:
+                break
+            }
+        }
         .onDisappear {
             refreshTask?.cancel()
             refreshTask = nil
@@ -245,10 +258,11 @@ struct HomeView: View {
     private func startRefreshTask() {
         refreshTask?.cancel()
         guard showServiceStats else { return }
-        let interval = max(1.0, autoRefreshInterval)
+        // Interval computed per-iteration based on widget overrides
         refreshTask = Task {
             await refreshAllStatsOnce()
             while !Task.isCancelled {
+                let interval = max(1.0, minEffectiveInterval())
                 try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
                 await refreshAllStatsOnce()
             }
@@ -261,6 +275,13 @@ struct HomeView: View {
         startRefreshTask()
     }
 
+    private func minEffectiveInterval() -> Double {
+        let base = autoRefreshInterval
+        let overrides = displayWidgets.compactMap { $0.refreshIntervalOverride }
+        let minOverride = overrides.min()
+        return min(base, minOverride ?? base)
+    }
+
     private func refreshAllStatsOnce() async {
         guard showServiceStats else { return }
         let widgets = displayWidgets
@@ -268,11 +289,16 @@ struct HomeView: View {
             if let cfg = serviceManager.services.first(where: {
                 $0.id == w.serviceId && $0.home == selectedHome
             }) {
+                let interval = w.refreshIntervalOverride ?? autoRefreshInterval
+                if let last = lastFetchByWidget[w.id], Date().timeIntervalSince(last) < interval {
+                    continue
+                }
                 let client = serviceManager.client(for: cfg)
                 do {
                     let payload = try await client.fetchStats()
                     await MainActor.run {
                         stats[w.serviceId] = payload
+                        lastFetchByWidget[w.id] = Date()
                     }
                 } catch {
                     // Ignore individual fetch errors
@@ -400,6 +426,7 @@ struct HomeView: View {
             case .proxmox: return "server.rack"
             case .jellyfin: return "tv"
             case .qbittorrent: return "arrow.down.circle"
+            case .pihole: return "shield.lefthalf.filled"
             }
         }
 
@@ -467,6 +494,35 @@ struct HomeView: View {
                         lines.append(
                             "Down: \(StatFormatter.formatRateBytesPerSec(q.downloadSpeedBytesPerSec))"
                         )
+                    }
+                }
+                return lines
+
+            case (.pihole, .pihole(let metrics)):
+                guard case .pihole(let p) = stats else { return [] }
+                var lines: [String] = []
+                for m in metrics {
+                    switch m {
+                    case .dnsQueriesToday:
+                        lines.append("Queries: \(p.dnsQueriesToday)")
+                    case .adsBlockedToday:
+                        lines.append("Blocked: \(p.adsBlockedToday)")
+                    case .adsPercentageToday:
+                        lines.append(
+                            "Block %: \(StatFormatter.formatPercent(p.adsPercentageToday))")
+                    case .uniqueClients:
+                        lines.append("Clients: \(p.uniqueClients)")
+                    case .queriesForwarded:
+                        lines.append("Forwarded: \(p.queriesForwarded)")
+                    case .queriesCached:
+                        lines.append("Cached: \(p.queriesCached)")
+                    case .domainsBeingBlocked:
+                        lines.append("Domains Blocked: \(p.domainsBeingBlocked)")
+                    case .gravityLastUpdatedRelative:
+                        lines.append("Gravity: \(p.gravityLastUpdatedRelative ?? "-")")
+                    case .blockingStatus:
+                        let statusText = (p.status ?? "-")
+                        lines.append("Status: \(statusText.capitalized)")
                     }
                 }
                 return lines
@@ -660,6 +716,58 @@ struct HomeView: View {
                                         }
                                     ))
                             }
+
+                        case .pihole:
+                            let available = PiHoleMetric.allCases
+                            ForEach(available, id: \.self) { m in
+                                Toggle(
+                                    labelForPiHole(m),
+                                    isOn: Binding(
+                                        get: { selectedPiHole().contains(m) },
+                                        set: { on in
+                                            var arr = selectedPiHole()
+                                            if on {
+                                                if !arr.contains(m) { arr.append(m) }
+                                            } else {
+                                                arr.removeAll(where: { $0 == m })
+                                            }
+                                            workingWidget.metrics = .pihole(arr)
+                                        }
+                                    ))
+                            }
+                        }
+                    }
+
+                    Section("Refresh") {
+                        Toggle(
+                            "Use custom refresh interval",
+                            isOn: Binding(
+                                get: { workingWidget.refreshIntervalOverride != nil },
+                                set: { useCustom in
+                                    if useCustom {
+                                        if workingWidget.refreshIntervalOverride == nil {
+                                            workingWidget.refreshIntervalOverride = 30.0
+                                        }
+                                    } else {
+                                        workingWidget.refreshIntervalOverride = nil
+                                    }
+                                }
+                            )
+                        )
+                        if workingWidget.refreshIntervalOverride != nil {
+                            Slider(
+                                value: Binding(
+                                    get: { workingWidget.refreshIntervalOverride ?? 30.0 },
+                                    set: { workingWidget.refreshIntervalOverride = $0 }
+                                ),
+                                in: 5...300,
+                                step: 5
+                            ) {
+                                Text("Custom Interval")
+                            }
+                            Text("\(Int(workingWidget.refreshIntervalOverride ?? 30.0)) seconds")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
 
@@ -700,6 +808,10 @@ struct HomeView: View {
             if case .qbittorrent(let arr) = workingWidget.metrics { return arr }
             return []
         }
+        private func selectedPiHole() -> [PiHoleMetric] {
+            if case .pihole(let arr) = workingWidget.metrics { return arr }
+            return []
+        }
 
         private func labelForProxmox(_ m: ProxmoxMetric) -> String {
             switch m {
@@ -726,6 +838,19 @@ struct HomeView: View {
             case .downloadingCount: return "Downloading Count"
             case .uploadSpeedBytesPerSec: return "Upload Speed"
             case .downloadSpeedBytesPerSec: return "Download Speed"
+            }
+        }
+        private func labelForPiHole(_ m: PiHoleMetric) -> String {
+            switch m {
+            case .dnsQueriesToday: return "Queries"
+            case .adsBlockedToday: return "Blocked"
+            case .adsPercentageToday: return "Block %"
+            case .uniqueClients: return "Clients"
+            case .queriesForwarded: return "Forwarded"
+            case .queriesCached: return "Cached"
+            case .domainsBeingBlocked: return "Domains Blocked"
+            case .gravityLastUpdatedRelative: return "Gravity Updated"
+            case .blockingStatus: return "Status"
             }
         }
     }
@@ -783,6 +908,7 @@ struct HomeView: View {
         @State private var proxmoxSelection: [ProxmoxMetric] = []
         @State private var jellyfinSelection: [JellyfinMetric] = []
         @State private var qbSelection: [QBittorrentMetric] = []
+        @State private var piholeSelection: [PiHoleMetric] = []
 
         private var selectedConfig: ServiceConfig? {
             services.first(where: { $0.id == selectedServiceId })
@@ -890,6 +1016,24 @@ struct HomeView: View {
                                             )
                                         )
                                     }
+                                case .pihole:
+                                    ForEach(PiHoleMetric.allCases, id: \.self) { m in
+                                        Toggle(
+                                            labelForPiHole(m),
+                                            isOn: Binding(
+                                                get: { piholeSelection.contains(m) },
+                                                set: { on in
+                                                    if on {
+                                                        if !piholeSelection.contains(m) {
+                                                            piholeSelection.append(m)
+                                                        }
+                                                    } else {
+                                                        piholeSelection.removeAll { $0 == m }
+                                                    }
+                                                }
+                                            )
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -903,25 +1047,33 @@ struct HomeView: View {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Add") {
                             if let cfg = selectedConfig {
-                                let metrics: WidgetMetricsSelection = {
-                                    switch cfg.kind {
-                                    case .proxmox:
-                                        return proxmoxSelection.isEmpty
-                                            ? HomeLayoutDefaults.defaultMetrics(
-                                                for: cfg.kind, size: size)
-                                            : .proxmox(proxmoxSelection)
-                                    case .jellyfin:
-                                        return jellyfinSelection.isEmpty
-                                            ? HomeLayoutDefaults.defaultMetrics(
-                                                for: cfg.kind, size: size)
-                                            : .jellyfin(jellyfinSelection)
-                                    case .qbittorrent:
-                                        return qbSelection.isEmpty
-                                            ? HomeLayoutDefaults.defaultMetrics(
-                                                for: cfg.kind, size: size)
-                                            : .qbittorrent(qbSelection)
-                                    }
-                                }()
+                                let metrics: WidgetMetricsSelection
+                                switch cfg.kind {
+                                case .proxmox:
+                                    metrics =
+                                        proxmoxSelection.isEmpty
+                                        ? HomeLayoutDefaults.defaultMetrics(
+                                            for: cfg.kind, size: size)
+                                        : .proxmox(proxmoxSelection)
+                                case .jellyfin:
+                                    metrics =
+                                        jellyfinSelection.isEmpty
+                                        ? HomeLayoutDefaults.defaultMetrics(
+                                            for: cfg.kind, size: size)
+                                        : .jellyfin(jellyfinSelection)
+                                case .qbittorrent:
+                                    metrics =
+                                        qbSelection.isEmpty
+                                        ? HomeLayoutDefaults.defaultMetrics(
+                                            for: cfg.kind, size: size)
+                                        : .qbittorrent(qbSelection)
+                                case .pihole:
+                                    metrics =
+                                        piholeSelection.isEmpty
+                                        ? HomeLayoutDefaults.defaultMetrics(
+                                            for: cfg.kind, size: size)
+                                        : .pihole(piholeSelection)
+                                }
                                 var widget = HomeWidget(
                                     serviceId: cfg.id,
                                     size: size,
@@ -972,6 +1124,19 @@ struct HomeView: View {
             case .downloadingCount: return "Downloading Count"
             case .uploadSpeedBytesPerSec: return "Upload Speed"
             case .downloadSpeedBytesPerSec: return "Download Speed"
+            }
+        }
+        private func labelForPiHole(_ m: PiHoleMetric) -> String {
+            switch m {
+            case .dnsQueriesToday: return "Queries"
+            case .adsBlockedToday: return "Blocked"
+            case .adsPercentageToday: return "Block %"
+            case .uniqueClients: return "Clients"
+            case .queriesForwarded: return "Forwarded"
+            case .queriesCached: return "Cached"
+            case .domainsBeingBlocked: return "Domains Blocked"
+            case .gravityLastUpdatedRelative: return "Gravity Updated"
+            case .blockingStatus: return "Status"
             }
         }
     }

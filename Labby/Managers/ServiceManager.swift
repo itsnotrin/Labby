@@ -45,6 +45,8 @@ final class ServiceManager: ObservableObject {
             return JellyfinClient(config: config)
         case .qbittorrent:
             return QBittorrentClient(config: config)
+        case .pihole:
+            return PiHoleClient(config: config)
         }
     }
 
