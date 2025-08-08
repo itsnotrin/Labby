@@ -14,27 +14,32 @@ struct ServicesView: View {
     @State private var testingServiceId: UUID?
     @State private var testResult: String?
     @State private var testError: String?
+    @State private var selectedHome: String =
+        UserDefaults.standard.string(forKey: "selectedHome") ?? "Default Home"
+    private var filteredServices: [ServiceConfig] {
+        serviceManager.services.filter { $0.home == selectedHome }
+    }
 
     var body: some View {
         NavigationView {
             List {
-                if serviceManager.services.isEmpty {
+                if filteredServices.isEmpty {
                     Section {
                         VStack(spacing: 16) {
                             Spacer(minLength: 0)
-                            
+
                             Image(systemName: "server.rack")
                                 .font(.system(size: 48))
                                 .foregroundStyle(.secondary)
-                            
+
                             Text("No Services Added")
                                 .font(.headline)
-                            
+
                             Text("Add your first service to get started")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
-                            
+
                             Spacer(minLength: 0)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -42,7 +47,7 @@ struct ServicesView: View {
                     }
                 } else {
                     Section {
-                        ForEach(serviceManager.services) { config in
+                        ForEach(filteredServices) { config in
                             ServiceRowView(config: config) {
                                 Task {
                                     await testConnection(config)
@@ -51,7 +56,7 @@ struct ServicesView: View {
                         }
                         .onDelete { indexSet in
                             for index in indexSet {
-                                let service = serviceManager.services[index]
+                                let service = filteredServices[index]
                                 serviceManager.removeService(id: service.id)
                             }
                         }
@@ -89,6 +94,10 @@ struct ServicesView: View {
                     Text(error)
                 }
             }
+            .onAppear {
+                selectedHome =
+                    UserDefaults.standard.string(forKey: "selectedHome") ?? "Default Home"
+            }
         }
     }
 
@@ -110,7 +119,7 @@ struct ServicesView: View {
 struct ServiceRowView: View {
     let config: ServiceConfig
     let onTest: () -> Void
-    
+
     @State private var isTesting = false
 
     var body: some View {
@@ -130,9 +139,20 @@ struct ServiceRowView: View {
                     Text(config.displayName)
                         .font(.headline)
                         .foregroundStyle(.primary)
-                    Text(config.kind.displayName)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 8) {
+                        Text(config.kind.displayName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        HStack(spacing: 4) {
+                            Image(systemName: "house.fill")
+                            Text(config.home)
+                        }
+                        .font(.caption2)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.secondary.opacity(0.15))
+                        .clipShape(Capsule())
+                    }
                 }
 
                 Spacer()
@@ -157,6 +177,8 @@ struct ServiceRowView: View {
             return Image(systemName: "server.rack")
         case .jellyfin:
             return Image(systemName: "tv")
+        case .qbittorrent:
+            return Image(systemName: "arrow.down.circle")
         }
     }
 }

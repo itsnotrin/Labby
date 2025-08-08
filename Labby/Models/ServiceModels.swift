@@ -10,6 +10,7 @@ import Foundation
 enum ServiceKind: String, Codable, CaseIterable, Identifiable {
     case proxmox
     case jellyfin
+    case qbittorrent
 
     var id: String { rawValue }
 
@@ -17,6 +18,7 @@ enum ServiceKind: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .proxmox: return "Proxmox"
         case .jellyfin: return "Jellyfin"
+        case .qbittorrent: return "qBittorrent"
         }
     }
 }
@@ -43,7 +45,9 @@ enum ServiceAuthConfig: Codable, Equatable {
     case usernamePassword(username: String, passwordKeychainKey: String)
     case proxmoxToken(tokenId: String, tokenSecretKeychainKey: String)
 
-    enum CodingKeys: String, CodingKey { case type, username, secretKey, tokenId, passwordKey, tokenSecretKey }
+    enum CodingKeys: String, CodingKey {
+        case type, username, secretKey, tokenId, passwordKey, tokenSecretKey
+    }
 
     enum Discriminator: String, Codable { case apiToken, usernamePassword, proxmoxToken }
 
@@ -90,6 +94,15 @@ struct ServiceConfig: Identifiable, Codable, Equatable {
     var baseURLString: String
     var auth: ServiceAuthConfig
     var insecureSkipTLSVerify: Bool
+    var home: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, displayName, kind, baseURLString, auth, insecureSkipTLSVerify, home
+    }
+
+    private static func defaultHome() -> String {
+        UserDefaults.standard.string(forKey: "selectedHome") ?? "Default Home"
+    }
 
     init(
         id: UUID = UUID(),
@@ -97,7 +110,8 @@ struct ServiceConfig: Identifiable, Codable, Equatable {
         kind: ServiceKind,
         baseURLString: String,
         auth: ServiceAuthConfig,
-        insecureSkipTLSVerify: Bool
+        insecureSkipTLSVerify: Bool,
+        home: String = ServiceConfig.defaultHome()
     ) {
         self.id = id
         self.displayName = displayName
@@ -105,6 +119,19 @@ struct ServiceConfig: Identifiable, Codable, Equatable {
         self.baseURLString = baseURLString
         self.auth = auth
         self.insecureSkipTLSVerify = insecureSkipTLSVerify
+        self.home = home
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(UUID.self, forKey: .id)
+        self.displayName = try container.decode(String.self, forKey: .displayName)
+        self.kind = try container.decode(ServiceKind.self, forKey: .kind)
+        self.baseURLString = try container.decode(String.self, forKey: .baseURLString)
+        self.auth = try container.decode(ServiceAuthConfig.self, forKey: .auth)
+        self.insecureSkipTLSVerify = try container.decode(Bool.self, forKey: .insecureSkipTLSVerify)
+        self.home =
+            try container.decodeIfPresent(String.self, forKey: .home) ?? ServiceConfig.defaultHome()
     }
 }
 
@@ -127,4 +154,3 @@ enum ServiceError: Error, LocalizedError {
         }
     }
 }
-

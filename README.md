@@ -13,6 +13,7 @@ Labby is a unified control app for managing multiple services from a single inte
 
 - **Proxmox:** Manage your virtual machines and containers. ([Setup Guide](docs/proxmox.md))
 - **Jellyfin:** Monitor your media server and access system information. ([Setup Guide](docs/jellyfin.md))
+- **qBittorrent:** Control your torrent downloads and settings. ([Setup Guide](docs/qbittorrent.md))
 
 ## Getting Started (User)
 

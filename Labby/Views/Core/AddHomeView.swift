@@ -40,12 +40,17 @@ struct AddHomeView: View {
     }
 
     private func saveNewHome() {
-        let trimmedName = newHomeName.trimmingCharacters(in: .whitespaces)
-        guard !trimmedName.isEmpty, !homes.contains(trimmedName) else { return }
+        let trimmedName = newHomeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
 
-        homes.append(trimmedName)
+        var updatedHomes = homes
+        if !updatedHomes.contains(trimmedName) {
+            updatedHomes.append(trimmedName)
+        }
+
+        homes = updatedHomes
         selectedHome = trimmedName
-        UserDefaults.standard.set(homes, forKey: "homes")
+        UserDefaults.standard.set(updatedHomes, forKey: "homes")
         UserDefaults.standard.set(trimmedName, forKey: "selectedHome")
         dismiss()
     }

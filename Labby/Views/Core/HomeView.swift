@@ -11,35 +11,48 @@ struct HomeView: View {
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var serviceManager = ServiceManager.shared
 
-    @State private var homes: [String] = UserDefaults.standard.stringArray(forKey: "homes") ?? ["Default Home"]
-    @State private var selectedHome: String = UserDefaults.standard.string(forKey: "selectedHome") ?? "Default Home"
+    @State private var homes: [String] =
+        UserDefaults.standard.stringArray(forKey: "homes") ?? ["Default Home"]
+    @State private var selectedHome: String =
+        UserDefaults.standard.string(forKey: "selectedHome") ?? "Default Home"
     @State private var isAddingHome: Bool = false
     @State private var testingServiceId: UUID?
     @State private var testResult: String?
     @State private var testError: String?
 
+    private var filteredServices: [ServiceConfig] {
+        serviceManager.services.filter { $0.home == selectedHome }
+    }
+
     var body: some View {
         NavigationView {
             ScrollView {
-                if serviceManager.services.isEmpty {
+                if filteredServices.isEmpty {
                     VStack(spacing: 24) {
                         Spacer(minLength: 0)
-                        
+
                         Image(systemName: "server.rack")
                             .font(.system(size: 64))
                             .foregroundStyle(.secondary)
-                        
+
                         VStack(spacing: 8) {
-                            Text("No Services Added")
-                                .font(.title2)
-                                .fontWeight(.semibold)
-                            
-                            Text("Add services in the Services tab to see them here")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
+                            Text(
+                                serviceManager.services.isEmpty
+                                    ? "No Services Added" : "No Services in \(selectedHome)"
+                            )
+                            .font(.title2)
+                            .fontWeight(.semibold)
+
+                            Text(
+                                serviceManager.services.isEmpty
+                                    ? "Add services in the Services tab to see them here"
+                                    : "Add services to the \(selectedHome) home in the Services tab"
+                            )
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
                         }
-                        
+
                         NavigationLink {
                             ServicesView()
                         } label: {
@@ -51,17 +64,19 @@ struct HomeView: View {
                                 .foregroundStyle(.white)
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
-                        
+
                         Spacer(minLength: 0)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding()
                 } else {
-                    LazyVGrid(columns: [
-                        GridItem(.flexible()),
-                        GridItem(.flexible())
-                    ], spacing: 16) {
-                        ForEach(serviceManager.services) { config in
+                    LazyVGrid(
+                        columns: [
+                            GridItem(.flexible()),
+                            GridItem(.flexible()),
+                        ], spacing: 16
+                    ) {
+                        ForEach(filteredServices) { config in
                             ServiceCardView(config: config) {
                                 Task {
                                     await testConnection(config)
@@ -135,6 +150,24 @@ struct HomeView: View {
                 Text(error)
             }
         }
+        .onAppear {
+            if let stored = UserDefaults.standard.string(forKey: "selectedHome") {
+                selectedHome = stored
+            }
+            let serviceHomes = Set(serviceManager.services.map { $0.home })
+            var updated = homes
+            for h in serviceHomes where !updated.contains(h) {
+                updated.append(h)
+            }
+            if updated != homes {
+                homes = updated
+                UserDefaults.standard.set(updated, forKey: "homes")
+            }
+            if !homes.contains(selectedHome) {
+                selectedHome = homes.first ?? "Default Home"
+                UserDefaults.standard.set(selectedHome, forKey: "selectedHome")
+            }
+        }
     }
 
     private func testConnection(_ config: ServiceConfig) async {
@@ -154,7 +187,7 @@ struct HomeView: View {
     struct ServiceCardView: View {
         let config: ServiceConfig
         let onTest: () -> Void
-        
+
         @State private var isTesting = false
 
         var body: some View {
@@ -206,6 +239,8 @@ struct HomeView: View {
                 return Image(systemName: "server.rack")
             case .jellyfin:
                 return Image(systemName: "tv")
+            case .qbittorrent:
+                return Image(systemName: "arrow.down.circle")
             }
         }
     }

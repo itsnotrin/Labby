@@ -5,8 +5,8 @@
 //  Created by Ryan Wiecz on 08/08/2025.
 //
 
-import Foundation
 import Combine
+import Foundation
 
 final class ServiceManager: ObservableObject {
     static let shared = ServiceManager()
@@ -43,6 +43,8 @@ final class ServiceManager: ObservableObject {
             return ProxmoxClient(config: config)
         case .jellyfin:
             return JellyfinClient(config: config)
+        case .qbittorrent:
+            return QBittorrentClient(config: config)
         }
     }
 
@@ -66,5 +68,25 @@ final class ServiceManager: ObservableObject {
             services = []
         }
     }
-}
 
+    func resetAllData() {
+        // Delete secrets for all configured services
+        for config in services {
+            switch config.auth {
+            case .apiToken(let secretKeychainKey):
+                KeychainStorage.shared.deleteSecret(forKey: secretKeychainKey)
+            case .usernamePassword(_, let passwordKeychainKey):
+                KeychainStorage.shared.deleteSecret(forKey: passwordKeychainKey)
+            case .proxmoxToken(_, let tokenSecretKeychainKey):
+                KeychainStorage.shared.deleteSecret(forKey: tokenSecretKeychainKey)
+            }
+        }
+        // Clear in-memory services
+        services.removeAll()
+        // Remove persisted storage
+        UserDefaults.standard.removeObject(forKey: storageKey)
+        // Also clear homes data
+        UserDefaults.standard.removeObject(forKey: "homes")
+        UserDefaults.standard.removeObject(forKey: "selectedHome")
+    }
+}

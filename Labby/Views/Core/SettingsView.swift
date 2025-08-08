@@ -14,6 +14,8 @@ struct SettingsView: View {
 
     private let appearanceOptions = ["Light", "Dark"]
 
+    @State private var isConfirmingResetEverything = false
+
     var body: some View {
         NavigationView {
             Form {
@@ -109,8 +111,33 @@ struct SettingsView: View {
                             Image(systemName: "arrow.counterclockwise")
                         }
                     }
+
+                    Button(role: .destructive) {
+                        isConfirmingResetEverything = true
+                    } label: {
+                        Label {
+                            Text("Reset Everything")
+                        } icon: {
+                            Image(systemName: "trash")
+                        }
+                    }
+                    .confirmationDialog(
+                        "Delete all homes and services?", isPresented: $isConfirmingResetEverything,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Delete Everything", role: .destructive) {
+                            ServiceManager.shared.resetAllData()
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text(
+                            "This action will permanently remove all homes and all saved services, including any stored credentials. This cannot be undone."
+                        )
+                    }
                 } footer: {
-                    Text("Resetting will restore all settings to their default values.")
+                    Text(
+                        "Reset All Settings restores settings to defaults. Reset Everything also deletes all homes and services."
+                    )
                 }
             }
             .navigationTitle("Settings")
