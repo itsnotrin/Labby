@@ -11,8 +11,8 @@ Labby is a unified control app for managing multiple services from a single inte
 
 ## Supported Services
 
-- **Proxmox:** Manage your virtual machines and containers.
-- **QBittorrent:** Control your torrent downloads and settings.
+- **Proxmox:** Manage your virtual machines and containers. ([Setup Guide](docs/proxmox.md))
+- **Jellyfin:** Monitor your media server and access system information. ([Setup Guide](docs/jellyfin.md))
 
 ## Getting Started (User)
 
@@ -28,7 +28,7 @@ Labby is a unified control app for managing multiple services from a single inte
 
 ## Roadmap
 
-- Add more services (e.g., Home Assistant, Jellyfin, etc.)
+- Add more services (e.g., Home Assistant, etc.)
 - Support for additional platforms (Android and a Desktop App).
 - Documentation for adding new services.
 

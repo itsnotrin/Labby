@@ -9,28 +9,62 @@ import SwiftUI
 
 struct ServicesView: View {
     @Environment(\.colorScheme) private var colorScheme
-
-    private let services = [
-        "Proxmox",
-        "QBittorrent"
-    ]
+    @StateObject private var serviceManager = ServiceManager.shared
+    @State private var isPresentingAdd = false
+    @State private var testingServiceId: UUID?
+    @State private var testResult: String?
+    @State private var testError: String?
 
     var body: some View {
         NavigationView {
             List {
-                Section {
-                    ForEach(services, id: \.self) { service in
-                        ServiceRowView(name: service)
+                if serviceManager.services.isEmpty {
+                    Section {
+                        VStack(spacing: 16) {
+                            Spacer(minLength: 0)
+                            
+                            Image(systemName: "server.rack")
+                                .font(.system(size: 48))
+                                .foregroundStyle(.secondary)
+                            
+                            Text("No Services Added")
+                                .font(.headline)
+                            
+                            Text("Add your first service to get started")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                            
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding(.vertical, 32)
                     }
-                } header: {
-                    Text("Active Services")
-                } footer: {
-                    Text("Connect and manage your services here")
+                } else {
+                    Section {
+                        ForEach(serviceManager.services) { config in
+                            ServiceRowView(config: config) {
+                                Task {
+                                    await testConnection(config)
+                                }
+                            }
+                        }
+                        .onDelete { indexSet in
+                            for index in indexSet {
+                                let service = serviceManager.services[index]
+                                serviceManager.removeService(id: service.id)
+                            }
+                        }
+                    } header: {
+                        Text("Active Services")
+                    } footer: {
+                        Text("Tap a service to test connection and log info to console")
+                    }
                 }
 
                 Section {
                     Button {
-                        // Add new service action
+                        isPresentingAdd = true
                     } label: {
                         HStack {
                             Image(systemName: "plus.circle.fill")
@@ -40,44 +74,89 @@ struct ServicesView: View {
                 }
             }
             .navigationTitle("Services")
+            .sheet(isPresented: $isPresentingAdd) {
+                AddServiceView()
+            }
+            .alert("Test Result", isPresented: .constant(testResult != nil || testError != nil)) {
+                Button("OK") {
+                    testResult = nil
+                    testError = nil
+                }
+            } message: {
+                if let result = testResult {
+                    Text(result)
+                } else if let error = testError {
+                    Text(error)
+                }
+            }
         }
+    }
+
+    private func testConnection(_ config: ServiceConfig) async {
+        testingServiceId = config.id
+        let client = serviceManager.client(for: config)
+        do {
+            let info = try await client.testConnection()
+            print("[Service Test] \(config.displayName): \(info)")
+            testResult = info
+        } catch {
+            print("[Service Test] \(config.displayName) error: \(error.localizedDescription)")
+            testError = error.localizedDescription
+        }
+        testingServiceId = nil
     }
 }
 
 struct ServiceRowView: View {
-    let name: String
+    let config: ServiceConfig
+    let onTest: () -> Void
+    
+    @State private var isTesting = false
 
     var body: some View {
-        HStack {
-            serviceIcon
-                .font(.title2)
-                .foregroundStyle(.secondary)
-
-            VStack(alignment: .leading) {
-                Text(name)
-                    .font(.headline)
-                Text("Connected")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        Button(action: {
+            isTesting = true
+            onTest()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                isTesting = false
             }
+        }) {
+            HStack {
+                serviceIcon
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
 
-            Spacer()
+                VStack(alignment: .leading) {
+                    Text(config.displayName)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Text(config.kind.displayName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+                Spacer()
+
+                if isTesting {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                } else {
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .padding(.vertical, 8)
         }
-        .padding(.vertical, 8)
+        .buttonStyle(.plain)
     }
 
     private var serviceIcon: Image {
-        switch name {
-        case "Proxmox":
+        switch config.kind {
+        case .proxmox:
             return Image(systemName: "server.rack")
-        case "QBittorrent":
-            return Image(systemName: "arrow.down.circle")
-        default:
-            return Image(systemName: "questionmark.circle")
+        case .jellyfin:
+            return Image(systemName: "tv")
         }
     }
 }
