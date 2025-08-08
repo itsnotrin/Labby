@@ -119,4 +119,101 @@ final class QBittorrentClient: ServiceClient {
             throw ServiceError.unknown
         }
     }
+
+    func fetchStats() async throws -> ServiceStatsPayload {
+        let session: URLSession
+        if config.insecureSkipTLSVerify {
+            session = URLSession(
+                configuration: .ephemeral, delegate: InsecureSessionDelegate(), delegateQueue: nil)
+        } else {
+            session = URLSession(configuration: .ephemeral)
+        }
+
+        let sessionCookie = try await authenticate(session: session)
+
+        guard let transferURL = URL(string: config.baseURLString + "/api/v2/transfer/info") else {
+            throw ServiceError.invalidURL
+        }
+        var transferRequest = URLRequest(url: transferURL)
+        transferRequest.httpMethod = "GET"
+        transferRequest.setValue("application/json", forHTTPHeaderField: "Accept")
+        transferRequest.setValue(sessionCookie, forHTTPHeaderField: "Cookie")
+
+        var uploadSpeed: Double = 0
+        var downloadSpeed: Double = 0
+
+        do {
+            let (data, response) = try await session.data(for: transferRequest)
+            guard let http = response as? HTTPURLResponse else { throw ServiceError.unknown }
+            guard 200..<300 ~= http.statusCode else {
+                throw ServiceError.httpStatus(http.statusCode)
+            }
+
+            struct TransferInfo: Codable {
+                let dlInfoSpeed: Int?
+                let upInfoSpeed: Int?
+                let dlspeed: Int?
+                let upspeed: Int?
+                enum CodingKeys: String, CodingKey {
+                    case dlInfoSpeed = "dl_info_speed"
+                    case upInfoSpeed = "up_info_speed"
+                    case dlspeed
+                    case upspeed
+                }
+            }
+
+            let info = try JSONDecoder().decode(TransferInfo.self, from: data)
+            downloadSpeed = Double(info.dlInfoSpeed ?? info.dlspeed ?? 0)
+            uploadSpeed = Double(info.upInfoSpeed ?? info.upspeed ?? 0)
+        } catch let error as ServiceError {
+            throw error
+        } catch {
+            throw ServiceError.network(error)
+        }
+
+        guard let torrentsURL = URL(string: config.baseURLString + "/api/v2/torrents/info") else {
+            throw ServiceError.invalidURL
+        }
+        var torrentsRequest = URLRequest(url: torrentsURL)
+        torrentsRequest.httpMethod = "GET"
+        torrentsRequest.setValue("application/json", forHTTPHeaderField: "Accept")
+        torrentsRequest.setValue(sessionCookie, forHTTPHeaderField: "Cookie")
+
+        do {
+            let (data, response) = try await session.data(for: torrentsRequest)
+            guard let http = response as? HTTPURLResponse else { throw ServiceError.unknown }
+            guard 200..<300 ~= http.statusCode else {
+                throw ServiceError.httpStatus(http.statusCode)
+            }
+
+            struct Torrent: Codable {
+                let state: String?
+            }
+            let torrents = try JSONDecoder().decode([Torrent].self, from: data)
+
+            let downloading = torrents.reduce(0) { count, t in
+                let s = (t.state ?? "").lowercased()
+                let isDownloading = s.contains("downloading") || s.contains("dl")
+                return count + (isDownloading ? 1 : 0)
+            }
+
+            let seeding = torrents.reduce(0) { count, t in
+                let s = (t.state ?? "").lowercased()
+                let isSeeding = s.contains("uploading") || s.contains("seeding") || s.contains("up")
+                return count + (isSeeding ? 1 : 0)
+            }
+
+            let stats = QBittorrentStats(
+                seeding: seeding,
+                downloading: downloading,
+                uploadSpeedBytesPerSec: uploadSpeed,
+                downloadSpeedBytesPerSec: downloadSpeed
+            )
+            return .qbittorrent(stats)
+        } catch let error as ServiceError {
+            throw error
+        } catch {
+            throw ServiceError.network(error)
+        }
+    }
 }
