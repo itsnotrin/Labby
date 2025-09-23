@@ -58,97 +58,41 @@ struct HomeView: View {
 
     var body: some View {
         NavigationView {
-            ScrollView {
-                if filteredServices.isEmpty {
-                    EmptyStateView(header: headerText, subheader: subheaderText)
-                } else {
-                    HomeGridView(
-                        widgets: displayWidgets,
-                        services: serviceManager.services,
-                        selectedHome: selectedHome,
-                        isEditingLayout: isEditingLayout,
-                        stats: stats,
-                        onEditWidget: { editingWidget = $0 },
-                        onStats: { serviceId, payload in
-                            stats[serviceId] = payload
-                        },
-                        onMove: { sourceId, targetId in
-                            var layout = layoutStore.layout(for: selectedHome)
-                            guard
-                                let sourceIndex = layout.widgets.firstIndex(where: { $0.id == sourceId }),
-                                let targetIndex = layout.widgets.firstIndex(where: { $0.id == targetId })
-                            else { return }
-                            let adjustedIndex = sourceIndex < targetIndex ? max(0, targetIndex - 1) : targetIndex
-                            layout.moveWidget(id: sourceId, to: adjustedIndex)
-                            layoutStore.setLayout(layout)
-                        },
-                        showServiceStats: showServiceStats,
-                        shouldSelfFetch: false
-                    )
-                    .padding()
-                }
-            }
+            HomeContentView(
+                filteredServicesIsEmpty: filteredServices.isEmpty,
+                displayWidgets: displayWidgets,
+                services: serviceManager.services,
+                selectedHome: selectedHome,
+                isEditingLayout: isEditingLayout,
+                stats: stats,
+                onEditWidget: { editingWidget = $0 },
+                onStats: { serviceId, payload in
+                    stats[serviceId] = payload
+                },
+                onMove: { sourceId, targetId in
+                    var layout = layoutStore.layout(for: selectedHome)
+                    guard
+                        let sourceIndex = layout.widgets.firstIndex(where: { $0.id == sourceId }),
+                        let targetIndex = layout.widgets.firstIndex(where: { $0.id == targetId })
+                    else { return }
+                    let adjustedIndex = sourceIndex < targetIndex ? max(0, targetIndex - 1) : targetIndex
+                    layout.moveWidget(id: sourceId, to: adjustedIndex)
+                    layoutStore.setLayout(layout)
+                },
+                showServiceStats: showServiceStats,
+                shouldSelfFetch: false
+            )
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Menu {
-                        ForEach(homes, id: \.self) { home in
-                            Button(action: {
-                                selectedHome = home
-                                UserDefaults.standard.set(home, forKey: "selectedHome")
-                            }) {
-                                HStack {
-                                    Text(home)
-                                        .fontWeight(selectedHome == home ? .bold : .regular)
-                                    Spacer()
-                                    if selectedHome == home {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                        }
-                        Divider()
-                        Button(action: {
-                            isAddingHome = true
-                        }) {
-                            Label("Add New Home", systemImage: "plus")
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Text(selectedHome)
-                                .font(.title)
-                                .fontWeight(.bold)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            Image(systemName: "chevron.down")
-                                .font(.title2)
-                        }
-                        .foregroundStyle(.primary)
-                        .buttonStyle(.borderless)
-                    }
-                }
-                ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    Button {
-                        isEditingLayout.toggle()
-                    } label: {
-                        Image(
-                            systemName: isEditingLayout
-                                ? "checkmark.seal.fill" : "rectangle.and.pencil.and.ellipsis")
-                    }
-                    if isEditingLayout {
-                        Button {
-                            isPresentingAddWidget = true
-                        } label: {
-                            Image(systemName: "plus.square.on.square")
-                        }
-                    } else {
-                        NavigationLink {
-                            ServicesView()
-                        } label: {
-                            Image(systemName: "plus")
-                        }
-                    }
-                }
+                HomeToolbarLeading(
+                    homes: $homes,
+                    selectedHome: $selectedHome,
+                    isAddingHome: $isAddingHome
+                )
+                HomeToolbarTrailing(
+                    isEditingLayout: $isEditingLayout,
+                    isPresentingAddWidget: $isPresentingAddWidget
+                )
             }
-            // merged into previous toolbar
         }
         .sheet(isPresented: $isAddingHome) {
             AddHomeView(homes: $homes, selectedHome: $selectedHome)
@@ -536,7 +480,7 @@ struct HomeView: View {
                         lines.append("Blocked: \(p.adsBlockedToday)")
                     case .adsPercentageToday:
                         lines.append(
-                            "Block %: \(StatFormatter.formatPercent(p.adsPercentageToday))")
+                            "Block %: \(p.adsPercentageToday)")
                     case .uniqueClients:
                         lines.append("Clients: \(p.uniqueClients)")
                     case .queriesForwarded:
@@ -556,6 +500,45 @@ struct HomeView: View {
 
             default:
                 return []
+            }
+        }
+    }
+
+    struct HomeContentView: View {
+        let filteredServicesIsEmpty: Bool
+        let displayWidgets: [HomeWidget]
+        let services: [ServiceConfig]
+        let selectedHome: String
+        let isEditingLayout: Bool
+        let stats: [UUID: ServiceStatsPayload]
+        let onEditWidget: (HomeWidget) -> Void
+        let onStats: (UUID, ServiceStatsPayload) -> Void
+        let onMove: (UUID, UUID) -> Void
+        let showServiceStats: Bool
+        let shouldSelfFetch: Bool
+
+        var body: some View {
+            ScrollView {
+                if filteredServicesIsEmpty {
+                    EmptyStateView(
+                        header: "No Services Added",
+                        subheader: "Add services in the Services tab to see them here"
+                    )
+                } else {
+                    HomeGridView(
+                        widgets: displayWidgets,
+                        services: services,
+                        selectedHome: selectedHome,
+                        isEditingLayout: isEditingLayout,
+                        stats: stats,
+                        onEditWidget: onEditWidget,
+                        onStats: onStats,
+                        onMove: onMove,
+                        showServiceStats: showServiceStats,
+                        shouldSelfFetch: shouldSelfFetch
+                    )
+                    .padding()
+                }
             }
         }
     }
@@ -802,6 +785,7 @@ struct HomeView: View {
                             }
                         }
                     }
+                    .tint(.green)
 
                     Section("Refresh") {
                         Toggle(
@@ -909,7 +893,7 @@ struct HomeView: View {
             switch m {
             case .dnsQueriesToday: return "Queries"
             case .adsBlockedToday: return "Blocked"
-            case .adsPercentageToday: return "Block %"
+            case .adsPercentageToday: return "Percentage Blocked"
             case .uniqueClients: return "Clients"
             case .queriesForwarded: return "Forwarded"
             case .queriesCached: return "Cached"
@@ -962,6 +946,80 @@ struct HomeView: View {
         }
     }
 
+    struct HomeToolbarLeading: ToolbarContent {
+        @Binding var homes: [String]
+        @Binding var selectedHome: String
+        @Binding var isAddingHome: Bool
+
+        var body: some ToolbarContent {
+            ToolbarItem(placement: .topBarLeading) {
+                Menu {
+                    ForEach(homes, id: \.self) { home in
+                        Button(action: {
+                            selectedHome = home
+                            UserDefaults.standard.set(home, forKey: "selectedHome")
+                        }) {
+                            HStack {
+                                Text(home)
+                                    .fontWeight(selectedHome == home ? .bold : .regular)
+                                Spacer()
+                                if selectedHome == home {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                    Divider()
+                    Button(action: { isAddingHome = true }) {
+                        Label("Add New Home", systemImage: "plus")
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(selectedHome)
+                            .font(.title)
+                            .fontWeight(.bold)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Image(systemName: "chevron.down")
+                            .font(.title2)
+                    }
+                    .foregroundStyle(.primary)
+                    .buttonStyle(.borderless)
+                }
+            }
+        }
+    }
+
+    struct HomeToolbarTrailing: ToolbarContent {
+        @Binding var isEditingLayout: Bool
+        @Binding var isPresentingAddWidget: Bool
+
+        var body: some ToolbarContent {
+            ToolbarItemGroup(placement: .navigationBarTrailing) {
+                Button {
+                    isEditingLayout.toggle()
+                } label: {
+                    Image(
+                        systemName: isEditingLayout
+                            ? "checkmark.seal.fill" : "rectangle.and.pencil.and.ellipsis")
+                }
+
+                if isEditingLayout {
+                    Button {
+                        isPresentingAddWidget = true
+                    } label: {
+                        Image(systemName: "plus.square.on.square")
+                    }
+                } else {
+                    NavigationLink {
+                        ServicesView()
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                }
+            }
+        }
+    }
+
     struct AddWidgetView: View {
         @Environment(\.dismiss) private var dismiss
         let services: [ServiceConfig]
@@ -999,17 +1057,16 @@ struct HomeView: View {
                         }
                     } else {
                         Section("Service") {
+                            let serviceSelection = Binding<UUID?>(
+                                get: { selectedServiceId ?? services.first?.id },
+                                set: { selectedServiceId = $0 }
+                            )
                             Picker(
                                 "Service",
-                                selection: Binding(
-                                    get: { selectedServiceId ?? services.first?.id },
-                                    set: { newValue in
-                                        selectedServiceId = newValue
-                                    }
-                                )
+                                selection: serviceSelection
                             ) {
                                 ForEach(services) { svc in
-                                    Text(svc.displayName).tag(Optional(svc.id))
+                                    Text(svc.displayName).tag(svc.id as UUID?)
                                 }
                             }
                         }
@@ -1029,80 +1086,26 @@ struct HomeView: View {
                                 switch cfg.kind {
                                 case .proxmox:
                                     ForEach(ProxmoxMetric.allCases, id: \.self) { m in
-                                        Toggle(
-                                            labelForProxmox(m),
-                                            isOn: Binding(
-                                                get: { proxmoxSelection.contains(m) },
-                                                set: { on in
-                                                    if on {
-                                                        if !proxmoxSelection.contains(m) {
-                                                            proxmoxSelection.append(m)
-                                                        }
-                                                    } else {
-                                                        proxmoxSelection.removeAll { $0 == m }
-                                                    }
-                                                }
-                                            )
-                                        )
+                                        Toggle(labelForProxmox(m), isOn: bindingForProxmox(m))
                                     }
                                 case .jellyfin:
                                     ForEach(JellyfinMetric.allCases, id: \.self) { m in
-                                        Toggle(
-                                            labelForJellyfin(m),
-                                            isOn: Binding(
-                                                get: { jellyfinSelection.contains(m) },
-                                                set: { on in
-                                                    if on {
-                                                        if !jellyfinSelection.contains(m) {
-                                                            jellyfinSelection.append(m)
-                                                        }
-                                                    } else {
-                                                        jellyfinSelection.removeAll { $0 == m }
-                                                    }
-                                                }
-                                            )
-                                        )
+                                        Toggle(labelForJellyfin(m), isOn: bindingForJellyfin(m))
                                     }
                                 case .qbittorrent:
                                     ForEach(QBittorrentMetric.allCases, id: \.self) { m in
-                                        Toggle(
-                                            labelForQB(m),
-                                            isOn: Binding(
-                                                get: { qbSelection.contains(m) },
-                                                set: { on in
-                                                    if on {
-                                                        if !qbSelection.contains(m) {
-                                                            qbSelection.append(m)
-                                                        }
-                                                    } else {
-                                                        qbSelection.removeAll { $0 == m }
-                                                    }
-                                                }
-                                            )
-                                        )
+                                        Toggle(labelForQB(m), isOn: bindingForQB(m))
                                     }
                                 case .pihole:
                                     ForEach(PiHoleMetric.allCases, id: \.self) { m in
-                                        Toggle(
-                                            labelForPiHole(m),
-                                            isOn: Binding(
-                                                get: { piholeSelection.contains(m) },
-                                                set: { on in
-                                                    if on {
-                                                        if !piholeSelection.contains(m) {
-                                                            piholeSelection.append(m)
-                                                        }
-                                                    } else {
-                                                        piholeSelection.removeAll { $0 == m }
-                                                    }
-                                                }
-                                            )
-                                        )
+                                        Toggle(labelForPiHole(m), isOn: bindingForPiHole(m))
                                     }
                                 }
                             }
+                            .tint(.green)
                         }
                     }
+
                 }
                 .navigationTitle("Add Widget")
                 .toolbar {
@@ -1164,6 +1167,59 @@ struct HomeView: View {
             }
         }
 
+        // Helper bindings extracted to simplify Toggle closures and improve type-check performance
+        private func bindingForProxmox(_ m: ProxmoxMetric) -> Binding<Bool> {
+            Binding(
+                get: { proxmoxSelection.contains(m) },
+                set: { on in
+                    if on {
+                        if !proxmoxSelection.contains(m) { proxmoxSelection.append(m) }
+                    } else {
+                        proxmoxSelection.removeAll { $0 == m }
+                    }
+                }
+            )
+        }
+
+        private func bindingForJellyfin(_ m: JellyfinMetric) -> Binding<Bool> {
+            Binding(
+                get: { jellyfinSelection.contains(m) },
+                set: { on in
+                    if on {
+                        if !jellyfinSelection.contains(m) { jellyfinSelection.append(m) }
+                    } else {
+                        jellyfinSelection.removeAll { $0 == m }
+                    }
+                }
+            )
+        }
+
+        private func bindingForQB(_ m: QBittorrentMetric) -> Binding<Bool> {
+            Binding(
+                get: { qbSelection.contains(m) },
+                set: { on in
+                    if on {
+                        if !qbSelection.contains(m) { qbSelection.append(m) }
+                    } else {
+                        qbSelection.removeAll { $0 == m }
+                    }
+                }
+            )
+        }
+
+        private func bindingForPiHole(_ m: PiHoleMetric) -> Binding<Bool> {
+            Binding(
+                get: { piholeSelection.contains(m) },
+                set: { on in
+                    if on {
+                        if !piholeSelection.contains(m) { piholeSelection.append(m) }
+                    } else {
+                        piholeSelection.removeAll { $0 == m }
+                    }
+                }
+            )
+        }
+
         private func labelForProxmox(_ m: ProxmoxMetric) -> String {
             switch m {
             case .cpuPercent: return "CPU %"
@@ -1195,7 +1251,7 @@ struct HomeView: View {
             switch m {
             case .dnsQueriesToday: return "Queries"
             case .adsBlockedToday: return "Blocked"
-            case .adsPercentageToday: return "Block %"
+            case .adsPercentageToday: return "Percentage Blocked"
             case .uniqueClients: return "Clients"
             case .queriesForwarded: return "Forwarded"
             case .queriesCached: return "Cached"
