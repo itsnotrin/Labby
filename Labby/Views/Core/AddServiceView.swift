@@ -86,6 +86,7 @@ struct AddServiceView: View {
                         }
 
                     Toggle("Ignore SSL Certificate Errors", isOn: $insecureSkipTLS)
+                        .tint(.green)
                         .onChange(of: insecureSkipTLS) { _, _ in
                             testAttempted = false
                             testPassed = false
