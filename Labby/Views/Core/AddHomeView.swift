@@ -13,12 +13,17 @@ struct AddHomeView: View {
     @Binding var selectedHome: String
     @State private var newHomeName: String = ""
 
+    private enum DefaultsKeys {
+        static let homes = "homes"
+        static let selectedHome = "selectedHome"
+    }
+
     var body: some View {
         NavigationView {
             Form {
                 Section(header: Text("New Home Details")) {
                     TextField("Home Name", text: $newHomeName)
-                        .autocapitalization(.words)
+                        .textInputAutocapitalization(.words)
                         .disableAutocorrection(true)
                 }
             }
@@ -50,8 +55,8 @@ struct AddHomeView: View {
 
         homes = updatedHomes
         selectedHome = trimmedName
-        UserDefaults.standard.set(updatedHomes, forKey: "homes")
-        UserDefaults.standard.set(trimmedName, forKey: "selectedHome")
+        UserDefaults.standard.set(updatedHomes, forKey: DefaultsKeys.homes)
+        UserDefaults.standard.set(trimmedName, forKey: DefaultsKeys.selectedHome)
         dismiss()
     }
 }

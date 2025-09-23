@@ -12,17 +12,32 @@ final class ProxmoxClient: ServiceClient {
         [:]
     let config: ServiceConfig
 
+    // Reuse a single URLSession per client (respecting insecure TLS option)
+    private lazy var session: URLSession = {
+        if config.insecureSkipTLSVerify {
+            return URLSession(
+                configuration: .ephemeral,
+                delegate: InsecureSessionDelegate(),
+                delegateQueue: nil
+            )
+        } else {
+            return URLSession(configuration: .ephemeral)
+        }
+    }()
+
     init(config: ServiceConfig) {
         self.config = config
     }
 
-    func testConnection() async throws -> String {
-        guard let url = URL(string: config.baseURLString + "/api2/json/version") else {
-            throw ServiceError.invalidURL
-        }
-
+    // Build an authorized JSON request with safe URL composition
+    private func makeRequest(
+        path: String,
+        method: String = "GET",
+        queryItems: [URLQueryItem]? = nil
+    ) throws -> URLRequest {
+        let url = try config.url(appending: path, queryItems: queryItems)
         var request = URLRequest(url: url)
-        request.httpMethod = "GET"
+        request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         switch config.auth {
@@ -39,13 +54,11 @@ final class ProxmoxClient: ServiceClient {
             throw ServiceError.unknown
         }
 
-        let session: URLSession
-        if config.insecureSkipTLSVerify {
-            session = URLSession(
-                configuration: .ephemeral, delegate: InsecureSessionDelegate(), delegateQueue: nil)
-        } else {
-            session = URLSession(configuration: .ephemeral)
-        }
+        return request
+    }
+
+    func testConnection() async throws -> String {
+        let request = try makeRequest(path: "/api2/json/version")
 
         do {
             let (data, response) = try await session.data(for: request)
@@ -70,38 +83,7 @@ final class ProxmoxClient: ServiceClient {
     }
 
     func fetchStats() async throws -> ServiceStatsPayload {
-        guard let url = URL(string: config.baseURLString + "/api2/json/nodes") else {
-            throw ServiceError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-
-        switch config.auth {
-        case .proxmoxToken(let tokenId, let tokenSecretKeychainKey):
-            guard
-                let secretData = KeychainStorage.shared.loadSecret(forKey: tokenSecretKeychainKey),
-                let secret = String(data: secretData, encoding: .utf8)
-            else {
-                throw ServiceError.missingSecret
-            }
-            let authHeader = "PVEAPIToken=\(tokenId)=\(secret)"
-            request.setValue(authHeader, forHTTPHeaderField: "Authorization")
-        default:
-            throw ServiceError.unknown
-        }
-
-        let session: URLSession
-        if config.insecureSkipTLSVerify {
-            session = URLSession(
-                configuration: .ephemeral,
-                delegate: InsecureSessionDelegate(),
-                delegateQueue: nil
-            )
-        } else {
-            session = URLSession(configuration: .ephemeral)
-        }
+        let request = try makeRequest(path: "/api2/json/nodes")
 
         do {
             let (data, response) = try await session.data(for: request)
@@ -137,52 +119,37 @@ final class ProxmoxClient: ServiceClient {
             var totalNetOut: Int64 = 0
 
             do {
-                if let vmURL = URL(
-                    string: config.baseURLString + "/api2/json/cluster/resources?type=vm")
-                {
-                    var vmRequest = URLRequest(url: vmURL)
-                    vmRequest.httpMethod = "GET"
-                    vmRequest.setValue("application/json", forHTTPHeaderField: "Accept")
-                    switch config.auth {
-                    case .proxmoxToken(let tokenId, let tokenSecretKeychainKey):
-                        if let secretData = KeychainStorage.shared.loadSecret(
-                            forKey: tokenSecretKeychainKey),
-                            let secret = String(data: secretData, encoding: .utf8)
-                        {
-                            let authHeader = "PVEAPIToken=\(tokenId)=\(secret)"
-                            vmRequest.setValue(authHeader, forHTTPHeaderField: "Authorization")
-                        }
-                    default:
-                        break
-                    }
+                // Fetch VM/LXC resources (optional best-effort)
+                let vmRequest = try makeRequest(
+                    path: "/api2/json/cluster/resources",
+                    queryItems: [URLQueryItem(name: "type", value: "vm")]
+                )
 
-                    struct VMResourcesResponse: Codable { let data: [VMResource] }
-                    struct VMResource: Codable {
-                        let type: String?
-                        let status: String?
-                        let netin: Int64?
-                        let netout: Int64?
-                    }
-
-                    let (vmData, vmResp) = try await session.data(for: vmRequest)
-                    guard let vmHTTP = vmResp as? HTTPURLResponse, 200..<300 ~= vmHTTP.statusCode
-                    else {
-                        throw ServiceError.unknown
-                    }
-                    let vmDecoded = try JSONDecoder().decode(VMResourcesResponse.self, from: vmData)
-
-                    totalCTs = vmDecoded.data.filter { ($0.type ?? "").lowercased() == "lxc" }.count
-                    totalVMs =
-                        vmDecoded.data.filter { t in
-                            let v = (t.type ?? "").lowercased()
-                            return v == "qemu" || v == "vm"
-                        }.count
-                    runningCount =
-                        vmDecoded.data.filter { ($0.status ?? "").lowercased() == "running" }.count
-                    stoppedCount = vmDecoded.data.count - runningCount
-                    totalNetIn = vmDecoded.data.compactMap { $0.netin }.reduce(0, +)
-                    totalNetOut = vmDecoded.data.compactMap { $0.netout }.reduce(0, +)
+                struct VMResourcesResponse: Codable { let data: [VMResource] }
+                struct VMResource: Codable {
+                    let type: String?
+                    let status: String?
+                    let netin: Int64?
+                    let netout: Int64?
                 }
+
+                let (vmData, vmResp) = try await session.data(for: vmRequest)
+                guard let vmHTTP = vmResp as? HTTPURLResponse, 200..<300 ~= vmHTTP.statusCode else {
+                    throw ServiceError.unknown
+                }
+                let vmDecoded = try JSONDecoder().decode(VMResourcesResponse.self, from: vmData)
+
+                totalCTs = vmDecoded.data.filter { ($0.type ?? "").lowercased() == "lxc" }.count
+                totalVMs =
+                    vmDecoded.data.filter { t in
+                        let v = (t.type ?? "").lowercased()
+                        return v == "qemu" || v == "vm"
+                    }.count
+                runningCount =
+                    vmDecoded.data.filter { ($0.status ?? "").lowercased() == "running" }.count
+                stoppedCount = vmDecoded.data.count - runningCount
+                totalNetIn = vmDecoded.data.compactMap { $0.netin }.reduce(0, +)
+                totalNetOut = vmDecoded.data.compactMap { $0.netout }.reduce(0, +)
             } catch {
                 // Ignore errors from this optional stats fetch
             }

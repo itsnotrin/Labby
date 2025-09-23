@@ -495,25 +495,25 @@ enum HomeLayoutDefaults {
 // MARK: - Stats Formatting Helpers
 
 enum StatFormatter {
+    private static let byteFormatter: ByteCountFormatter = {
+        let f = ByteCountFormatter()
+        f.countStyle = .binary
+        f.includesUnit = true
+        f.isAdaptive = true
+        return f
+    }()
+
     static func formatPercent(_ value: Double) -> String {
         String(format: "%.0f%%", value)
     }
 
     static func formatBytes(_ bytes: Int64) -> String {
-        let f = ByteCountFormatter()
-        f.countStyle = .binary
-        f.includesUnit = true
-        f.isAdaptive = true
-        return f.string(fromByteCount: bytes)
+        byteFormatter.string(fromByteCount: bytes)
     }
 
     static func formatRateBytesPerSec(_ bytesPerSec: Double) -> String {
         // e.g., "12.3 MB/s"
-        let f = ByteCountFormatter()
-        f.countStyle = .binary
-        f.includesUnit = true
-        f.isAdaptive = true
-        let perSec = f.string(fromByteCount: Int64(bytesPerSec)) + "/s"
+        let perSec = byteFormatter.string(fromByteCount: Int64(bytesPerSec)) + "/s"
         return perSec
     }
 }
@@ -528,8 +528,8 @@ final class HomeLayoutStore: ObservableObject {
     @Published private(set) var layouts: [String: HomeLayout] = [:]
 
     private let storageKey = "home.layouts.v1"
-    private let decoder = JSONDecoder()
-    private let encoder = JSONEncoder()
+    private static let decoder = JSONDecoder()
+    private static let encoder = JSONEncoder()
 
     private init() {
         load()
@@ -576,7 +576,7 @@ final class HomeLayoutStore: ObservableObject {
 
     private func persist() {
         do {
-            let data = try encoder.encode(layouts)
+            let data = try Self.encoder.encode(layouts)
             UserDefaults.standard.set(data, forKey: storageKey)
         } catch {
             print("[HomeLayoutStore] Persist error: \(error)")
@@ -586,7 +586,7 @@ final class HomeLayoutStore: ObservableObject {
     private func load() {
         guard let data = UserDefaults.standard.data(forKey: storageKey) else { return }
         do {
-            layouts = try decoder.decode([String: HomeLayout].self, from: data)
+            layouts = try Self.decoder.decode([String: HomeLayout].self, from: data)
         } catch {
             print("[HomeLayoutStore] Load error: \(error)")
             layouts = [:]

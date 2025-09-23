@@ -137,6 +137,27 @@ struct ServiceConfig: Identifiable, Codable, Equatable {
     }
 }
 
+extension ServiceConfig {
+    /// Safely builds a URL by appending a path (and optional query items) to the baseURLString.
+    /// - Parameters:
+    ///   - path: The path to append. Leading "/" is optional and will be normalized.
+    ///   - queryItems: Optional query items to include.
+    /// - Throws: ServiceError.invalidURL when baseURLString or composed URL is invalid.
+    /// - Returns: A composed URL based on baseURLString.
+    func url(appending path: String, queryItems: [URLQueryItem]? = nil) throws -> URL {
+        guard var comps = URLComponents(string: baseURLString) else {
+            throw ServiceError.invalidURL
+        }
+        var basePath = comps.path
+        if !basePath.hasSuffix("/") { basePath += "/" }
+        let trimmed = path.hasPrefix("/") ? String(path.dropFirst()) : path
+        comps.path = basePath + trimmed
+        comps.queryItems = queryItems
+        guard let url = comps.url else { throw ServiceError.invalidURL }
+        return url
+    }
+}
+
 enum ServiceError: Error, LocalizedError {
     case invalidURL
     case missingSecret

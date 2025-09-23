@@ -11,6 +11,19 @@ final class PiHoleClient: ServiceClient {
     private let defaultsKeyCSRF = "PiHoleClient.csrf"
     private let defaultsKeySidExpiry = "PiHoleClient.sidExpiry"
 
+    // Reuse a single URLSession per client (respecting insecure TLS option)
+    private lazy var session: URLSession = {
+        if config.insecureSkipTLSVerify {
+            return URLSession(
+                configuration: .ephemeral,
+                delegate: InsecureSessionDelegate(),
+                delegateQueue: nil
+            )
+        } else {
+            return URLSession(configuration: .ephemeral)
+        }
+    }()
+
     init(config: ServiceConfig) {
         self.config = config
         self.loadSessionCache()
@@ -19,7 +32,7 @@ final class PiHoleClient: ServiceClient {
     // MARK: - ServiceClient
 
     func testConnection() async throws -> String {
-        let session = makeSession()
+        let session = self.session
         try await ensureAuthenticated(session: session)
         let url = try makeURL(path: "api/info/version")
 
@@ -65,7 +78,7 @@ final class PiHoleClient: ServiceClient {
     }
 
     func fetchStats() async throws -> ServiceStatsPayload {
-        let session = makeSession()
+        let session = self.session
         try await ensureAuthenticated(session: session)
 
         // 1) Get blocking status from v6 endpoint
@@ -109,8 +122,6 @@ final class PiHoleClient: ServiceClient {
                 request.httpMethod = "GET"
                 request.setValue("application/json", forHTTPHeaderField: "Accept")
                 if let sid = sid {
-                    let redacted = sid.prefix(4) + "…"
-                    print("[PiHoleClient] Using SID (redacted): \(redacted) for path \(path)")
                     request.setValue(sid, forHTTPHeaderField: "X-FTL-SID")
                     request.setValue("sid=\(sid)", forHTTPHeaderField: "Cookie")
                     if let csrf = csrf {
@@ -120,10 +131,6 @@ final class PiHoleClient: ServiceClient {
 
                 let (data, response) = try await session.data(for: request)
                 let http = response as? HTTPURLResponse
-                let bodyPreview = String(data: data, encoding: .utf8) ?? ""
-                print(
-                    "[PiHoleClient] v6 \(path) status=\(http?.statusCode ?? -1) body=\(bodyPreview.prefix(500))"
-                )
                 guard let httpResp = http, (200..<300).contains(httpResp.statusCode)
                 else { continue }
 
@@ -324,9 +331,7 @@ final class PiHoleClient: ServiceClient {
                         || stats.queriesForwarded > 0
                         || stats.queriesCached > 0
                     {
-                        print(
-                            "[PiHoleClient] parsed stats (v6): total=\(stats.dnsQueriesToday) blocked=\(stats.adsBlockedToday) percent=\(stats.adsPercentageToday) clients=\(stats.uniqueClients) forwarded=\(stats.queriesForwarded) cached=\(stats.queriesCached) domains=\(stats.domainsBeingBlocked)"
-                        )
+                        // parsed v6 stats
                         return .pihole(stats)
                     } else {
                         let presenceKeys = [
@@ -340,9 +345,7 @@ final class PiHoleClient: ServiceClient {
                             payload["queries"] != nil || payload["clients"] != nil
                             || payload["gravity"] != nil
                         if hasExpectedKeys || hasNestedStats {
-                            print(
-                                "[PiHoleClient] parsed stats (v6): total=\(stats.dnsQueriesToday) blocked=\(stats.adsBlockedToday) percent=\(stats.adsPercentageToday) clients=\(stats.uniqueClients) forwarded=\(stats.queriesForwarded) cached=\(stats.queriesCached) domains=\(stats.domainsBeingBlocked)"
-                            )
+                            // parsed v6 stats
                             return .pihole(stats)
                         }
                     }
@@ -369,10 +372,6 @@ final class PiHoleClient: ServiceClient {
         do {
             let (data, response) = try await session.data(for: legacyReq)
             guard let http = response as? HTTPURLResponse else { throw ServiceError.unknown }
-            let bodyPreview = String(data: data, encoding: .utf8) ?? ""
-            print(
-                "[PiHoleClient] legacy summaryRaw status=\(http.statusCode) body=\(bodyPreview.prefix(500))"
-            )
             guard 200..<300 ~= http.statusCode else {
                 let body = String(data: data, encoding: .utf8) ?? ""
                 throw ServiceError.network(
@@ -393,9 +392,7 @@ final class PiHoleClient: ServiceClient {
             }
             var stats = PiHoleStats(raw: summary)
             if let s = blockingStatus { stats.status = s }
-            print(
-                "[PiHoleClient] parsed stats (legacy): total=\(stats.dnsQueriesToday) blocked=\(stats.adsBlockedToday) percent=\(stats.adsPercentageToday) clients=\(stats.uniqueClients) forwarded=\(stats.queriesForwarded) cached=\(stats.queriesCached) domains=\(stats.domainsBeingBlocked)"
-            )
+            // parsed legacy stats
             return .pihole(stats)
         } catch let error as ServiceError {
             throw error

@@ -8,9 +8,9 @@
 import SwiftUI
 
 struct HomeView: View {
-    @Environment(\.colorScheme) private var colorScheme
-    @StateObject private var serviceManager = ServiceManager.shared
-    @StateObject private var layoutStore = HomeLayoutStore.shared
+
+    @ObservedObject private var serviceManager = ServiceManager.shared
+    @ObservedObject private var layoutStore = HomeLayoutStore.shared
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("autoRefreshInterval") private var autoRefreshInterval = 30.0
     @AppStorage("showServiceStats") private var showServiceStats = true
@@ -115,8 +115,6 @@ struct HomeView: View {
                         .buttonStyle(.borderless)
                     }
                 }
-            }
-            .toolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     Button {
                         isEditingLayout.toggle()
@@ -140,6 +138,7 @@ struct HomeView: View {
                     }
                 }
             }
+            // merged into previous toolbar
         }
         .sheet(isPresented: $isAddingHome) {
             AddHomeView(homes: $homes, selectedHome: $selectedHome)
@@ -214,16 +213,19 @@ struct HomeView: View {
             // Start periodic stats refresh
             startRefreshTask()
         }
-        .onChange(of: autoRefreshInterval) { _ in
+        .onChange(of: autoRefreshInterval) {
             restartRefreshTask()
         }
-        .onChange(of: showServiceStats) { _ in
+        .onChange(of: showServiceStats) {
             restartRefreshTask()
         }
-        .onChange(of: selectedHome) { _ in
+        .onChange(of: selectedHome) {
+            // Clear cached stats when switching homes to avoid stale data
+            stats.removeAll()
+            lastFetchByWidget.removeAll()
             restartRefreshTask()
         }
-        .onChange(of: scenePhase) { phase in
+        .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .active:
                 restartRefreshTask()
@@ -285,23 +287,38 @@ struct HomeView: View {
     private func refreshAllStatsOnce() async {
         guard showServiceStats else { return }
         let widgets = displayWidgets
-        for w in widgets {
-            if let cfg = serviceManager.services.first(where: {
-                $0.id == w.serviceId && $0.home == selectedHome
-            }) {
-                let interval = w.refreshIntervalOverride ?? autoRefreshInterval
-                if let last = lastFetchByWidget[w.id], Date().timeIntervalSince(last) < interval {
-                    continue
-                }
-                let client = serviceManager.client(for: cfg)
-                do {
-                    let payload = try await client.fetchStats()
-                    await MainActor.run {
-                        stats[w.serviceId] = payload
-                        lastFetchByWidget[w.id] = Date()
+        let due = widgets.compactMap { w -> (HomeWidget, ServiceConfig)? in
+            guard
+                let cfg = serviceManager.services.first(where: {
+                    $0.id == w.serviceId && $0.home == selectedHome
+                })
+            else { return nil }
+            let interval = w.refreshIntervalOverride ?? autoRefreshInterval
+            if let last = lastFetchByWidget[w.id], Date().timeIntervalSince(last) < interval {
+                return nil
+            }
+            return (w, cfg)
+        }
+
+        await withTaskGroup(of: (UUID, UUID, ServiceStatsPayload)?.self) { group in
+            for (w, cfg) in due {
+                group.addTask {
+                    let client = await MainActor.run { ServiceManager.shared.client(for: cfg) }
+                    do {
+                        let payload = try await client.fetchStats()
+                        return (w.id, w.serviceId, payload)
+                    } catch {
+                        // Ignore individual fetch errors
+                        return nil
                     }
-                } catch {
-                    // Ignore individual fetch errors
+                }
+            }
+            for await result in group {
+                if let (widgetId, serviceId, payload) = result {
+                    await MainActor.run {
+                        stats[serviceId] = payload
+                        lastFetchByWidget[widgetId] = Date()
+                    }
                 }
             }
         }

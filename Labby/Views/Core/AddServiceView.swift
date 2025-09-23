@@ -9,7 +9,11 @@ import SwiftUI
 
 struct AddServiceView: View {
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var serviceManager = ServiceManager.shared
+    @ObservedObject private var serviceManager = ServiceManager.shared
+
+    private enum DefaultsKeys {
+        static let selectedHome = "selectedHome"
+    }
 
     @State private var displayName = ""
     @State private var selectedService: ServiceKind = .proxmox
@@ -30,14 +34,17 @@ struct AddServiceView: View {
     @State private var testAttempted = false
     @State private var testPassed = false
 
+    // Track temporary Keychain keys created during testing (ephemeral)
+    @State private var tempKeychainKeys: [String] = []
+
     var body: some View {
         NavigationView {
             Form {
 
                 Section("Service Details") {
                     TextField("Display Name", text: $displayName)
-                        .textContentType(.none)
-                        .autocapitalization(.words)
+                        .textContentType(.name)
+                        .textInputAutocapitalization(.words)
 
                     Picker("Service Type", selection: $selectedService) {
                         ForEach(ServiceKind.allCases) { service in
@@ -45,7 +52,7 @@ struct AddServiceView: View {
                         }
                     }
                     .pickerStyle(.menu)
-                    .onChange(of: selectedService) { newService in
+                    .onChange(of: selectedService) { _, newService in
                         // Auto-switch auth method based on service
                         switch newService {
                         case .proxmox:
@@ -60,26 +67,31 @@ struct AddServiceView: View {
                         // Changing service type requires re-test
                         testAttempted = false
                         testPassed = false
+                        testResult = nil
+                        testError = nil
+                        cleanupTempSecrets()
                     }
 
                     TextField("Server URL", text: $baseURL)
                         .textContentType(.URL)
                         .keyboardType(.URL)
-                        .autocapitalization(.none)
+                        .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                        .onChange(of: baseURL) { _ in
+                        .onChange(of: baseURL) { _, _ in
                             testAttempted = false
                             testPassed = false
                             testResult = nil
                             testError = nil
+                            cleanupTempSecrets()
                         }
 
                     Toggle("Ignore SSL Certificate Errors", isOn: $insecureSkipTLS)
-                        .onChange(of: insecureSkipTLS) { _ in
+                        .onChange(of: insecureSkipTLS) { _, _ in
                             testAttempted = false
                             testPassed = false
                             testResult = nil
                             testError = nil
+                            cleanupTempSecrets()
                         }
                 }
 
@@ -90,10 +102,13 @@ struct AddServiceView: View {
                         }
                     }
                     .pickerStyle(.menu)
-                    .onChange(of: authMethod) { _ in
+                    .onChange(of: authMethod) { _, _ in
                         // Changing auth method requires re-test
                         testAttempted = false
                         testPassed = false
+                        testResult = nil
+                        testError = nil
+                        cleanupTempSecrets()
                     }
 
                     switch authMethod {
@@ -101,54 +116,59 @@ struct AddServiceView: View {
                         if selectedService != .pihole {
                             TextField("Username", text: $username)
                                 .textContentType(.username)
-                                .autocapitalization(.none)
+                                .textInputAutocapitalization(.never)
                                 .autocorrectionDisabled()
-                                .onChange(of: username) { _ in
+                                .onChange(of: username) { _, _ in
                                     testAttempted = false
                                     testPassed = false
                                     testResult = nil
                                     testError = nil
+                                    cleanupTempSecrets()
                                 }
                         }
 
                         SecureField("Password", text: $password)
                             .textContentType(.password)
-                            .onChange(of: password) { _ in
+                            .onChange(of: password) { _, _ in
                                 testAttempted = false
                                 testPassed = false
                                 testResult = nil
                                 testError = nil
+                                cleanupTempSecrets()
                             }
 
                     case .apiToken:
                         SecureField("API Token", text: $apiToken)
                             .textContentType(.none)
-                            .onChange(of: apiToken) { _ in
+                            .onChange(of: apiToken) { _, _ in
                                 testAttempted = false
                                 testPassed = false
                                 testResult = nil
                                 testError = nil
+                                cleanupTempSecrets()
                             }
 
                     case .proxmoxToken:
                         TextField("Token ID (e.g., root@pam!labby)", text: $proxmoxTokenId)
                             .textContentType(.none)
-                            .autocapitalization(.none)
+                            .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
-                            .onChange(of: proxmoxTokenId) { _ in
+                            .onChange(of: proxmoxTokenId) { _, _ in
                                 testAttempted = false
                                 testPassed = false
                                 testResult = nil
                                 testError = nil
+                                cleanupTempSecrets()
                             }
 
                         SecureField("Token Secret", text: $proxmoxTokenSecret)
                             .textContentType(.none)
-                            .onChange(of: proxmoxTokenSecret) { _ in
+                            .onChange(of: proxmoxTokenSecret) { _, _ in
                                 testAttempted = false
                                 testPassed = false
                                 testResult = nil
                                 testError = nil
+                                cleanupTempSecrets()
                             }
                     }
                 }
@@ -181,6 +201,7 @@ struct AddServiceView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
+                        cleanupTempSecrets()
                         dismiss()
                     }
                 }
@@ -257,7 +278,23 @@ struct AddServiceView: View {
     private func saveService() {
         let config = createServiceConfig()
         serviceManager.addService(config)
+        // After successfully saving, clean up any leftover temporary secrets
+        cleanupTempSecrets()
         dismiss()
+    }
+
+    private func makeTempKey(_ suffix: String) -> String {
+        let key = "labby.temp.\(suffix).\(UUID().uuidString)"
+        tempKeychainKeys.append(key)
+        return key
+    }
+
+    private func cleanupTempSecrets() {
+        guard !tempKeychainKeys.isEmpty else { return }
+        for key in tempKeychainKeys {
+            KeychainStorage.shared.deleteSecret(forKey: key)
+        }
+        tempKeychainKeys.removeAll()
     }
 
     private func createServiceConfig() -> ServiceConfig {
@@ -266,22 +303,65 @@ struct AddServiceView: View {
         switch authMethod {
         case .usernamePassword:
             let passwordKey = "\(UUID().uuidString)_password"
-            KeychainStorage.shared.saveSecret(password.data(using: .utf8)!, forKey: passwordKey)
+            if let data = password.data(using: .utf8) {
+                _ = KeychainStorage.shared.saveSecretStatus(data, forKey: passwordKey)
+            }
             auth = .usernamePassword(username: username, passwordKeychainKey: passwordKey)
 
         case .apiToken:
             let tokenKey = "\(UUID().uuidString)_token"
-            KeychainStorage.shared.saveSecret(apiToken.data(using: .utf8)!, forKey: tokenKey)
+            if let data = apiToken.data(using: .utf8) {
+                _ = KeychainStorage.shared.saveSecretStatus(data, forKey: tokenKey)
+            }
             auth = .apiToken(secretKeychainKey: tokenKey)
 
         case .proxmoxToken:
             let secretKey = "\(UUID().uuidString)_proxmox_secret"
-            KeychainStorage.shared.saveSecret(
-                proxmoxTokenSecret.data(using: .utf8)!, forKey: secretKey)
+            if let data = proxmoxTokenSecret.data(using: .utf8) {
+                _ = KeychainStorage.shared.saveSecretStatus(data, forKey: secretKey)
+            }
             auth = .proxmoxToken(tokenId: proxmoxTokenId, tokenSecretKeychainKey: secretKey)
         }
 
-        let home = UserDefaults.standard.string(forKey: "selectedHome") ?? "Default Home"
+        let home = UserDefaults.standard.string(forKey: DefaultsKeys.selectedHome) ?? "Default Home"
+        return ServiceConfig(
+            displayName: displayName.trimmingCharacters(in: .whitespaces),
+            kind: selectedService,
+            baseURLString: baseURL.trimmingCharacters(in: .whitespaces),
+            auth: auth,
+            insecureSkipTLSVerify: insecureSkipTLS,
+            home: home
+        )
+    }
+
+    // Build a ServiceConfig that uses temporary Keychain entries for testing only.
+    private func createEphemeralTestConfig() -> ServiceConfig {
+        let auth: ServiceAuthConfig
+
+        switch authMethod {
+        case .usernamePassword:
+            let tempPassKey = makeTempKey("password")
+            if let data = password.data(using: .utf8) {
+                _ = KeychainStorage.shared.saveSecretStatus(data, forKey: tempPassKey)
+            }
+            auth = .usernamePassword(username: username, passwordKeychainKey: tempPassKey)
+
+        case .apiToken:
+            let tempTokenKey = makeTempKey("token")
+            if let data = apiToken.data(using: .utf8) {
+                _ = KeychainStorage.shared.saveSecretStatus(data, forKey: tempTokenKey)
+            }
+            auth = .apiToken(secretKeychainKey: tempTokenKey)
+
+        case .proxmoxToken:
+            let tempSecretKey = makeTempKey("proxmox_secret")
+            if let data = proxmoxTokenSecret.data(using: .utf8) {
+                _ = KeychainStorage.shared.saveSecretStatus(data, forKey: tempSecretKey)
+            }
+            auth = .proxmoxToken(tokenId: proxmoxTokenId, tokenSecretKeychainKey: tempSecretKey)
+        }
+
+        let home = UserDefaults.standard.string(forKey: DefaultsKeys.selectedHome) ?? "Default Home"
         return ServiceConfig(
             displayName: displayName.trimmingCharacters(in: .whitespaces),
             kind: selectedService,
@@ -297,7 +377,10 @@ struct AddServiceView: View {
         testAttempted = true
         defer { isTesting = false }
 
-        let config = createServiceConfig()
+        // Ensure previous temp secrets are removed before creating new ephemeral ones
+        cleanupTempSecrets()
+
+        let config = createEphemeralTestConfig()
         let client = serviceManager.client(for: config)
 
         do {

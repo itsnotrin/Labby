@@ -5,8 +5,8 @@
 //  Created by Ryan Wiecz on 27/07/2025.
 //
 
-import SwiftUI
 import Combine
+import SwiftUI
 
 enum AppTheme: Int {
     case light = 0

@@ -9,7 +9,9 @@ import SwiftUI
 
 @main
 struct LabbyApp: App {
-    @StateObject private var appearanceManager = AppearanceManager.shared
+    // Use ObservedObject for a shared singleton. The App view doesn't own the object,
+    // it simply observes changes to apply the preferred color scheme.
+    @ObservedObject private var appearanceManager = AppearanceManager.shared
 
     var body: some Scene {
         WindowGroup {

@@ -8,8 +8,7 @@
 import SwiftUI
 
 struct ServicesView: View {
-    @Environment(\.colorScheme) private var colorScheme
-    @StateObject private var serviceManager = ServiceManager.shared
+    @ObservedObject private var serviceManager = ServiceManager.shared
     @State private var isPresentingAdd = false
     @State private var testingServiceId: UUID?
     @State private var testResult: String?
@@ -48,7 +47,8 @@ struct ServicesView: View {
                 } else {
                     Section {
                         ForEach(filteredServices) { config in
-                            ServiceRowView(config: config) {
+                            ServiceRowView(config: config, isTesting: testingServiceId == config.id)
+                            {
                                 Task {
                                     await testConnection(config)
                                 }
@@ -118,17 +118,12 @@ struct ServicesView: View {
 
 struct ServiceRowView: View {
     let config: ServiceConfig
+    let isTesting: Bool
     let onTest: () -> Void
-
-    @State private var isTesting = false
 
     var body: some View {
         Button(action: {
-            isTesting = true
             onTest()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                isTesting = false
-            }
         }) {
             HStack {
                 serviceIcon

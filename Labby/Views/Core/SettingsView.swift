@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @StateObject private var appearanceManager = AppearanceManager.shared
+    @ObservedObject private var appearanceManager = AppearanceManager.shared
     @AppStorage("showServiceStats") private var showServiceStats = true
     @AppStorage("autoRefreshInterval") private var autoRefreshInterval = 30.0
 
@@ -17,6 +17,7 @@ struct SettingsView: View {
     @State private var isConfirmingResetEverything = false
 
     var body: some View {
+        // TODO: Consider migrating to NavigationStack (iOS 16+) instead of NavigationView.
         NavigationView {
             Form {
                 Section {

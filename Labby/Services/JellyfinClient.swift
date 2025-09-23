@@ -10,24 +10,39 @@ import Foundation
 final class JellyfinClient: ServiceClient {
     let config: ServiceConfig
 
+    // Reuse a single URLSession per client (respecting insecure TLS option)
+    private lazy var session: URLSession = {
+        if config.insecureSkipTLSVerify {
+            return URLSession(
+                configuration: .ephemeral,
+                delegate: InsecureSessionDelegate(),
+                delegateQueue: nil
+            )
+        } else {
+            return URLSession(configuration: .ephemeral)
+        }
+    }()
+
+    // Stable device id for Jellyfin "MediaBrowser" header
+    private static let deviceIdKey = "JellyfinClient.deviceId"
+    private static func stableDeviceId() -> String {
+        let defaults = UserDefaults.standard
+        if let existing = defaults.string(forKey: deviceIdKey) {
+            return existing
+        }
+        let newId = UUID().uuidString
+        defaults.set(newId, forKey: deviceIdKey)
+        return newId
+    }
+
     init(config: ServiceConfig) {
         self.config = config
     }
 
     func testConnection() async throws -> String {
-        let session: URLSession
-        if config.insecureSkipTLSVerify {
-            session = URLSession(
-                configuration: .ephemeral, delegate: InsecureSessionDelegate(), delegateQueue: nil)
-        } else {
-            session = URLSession(configuration: .ephemeral)
-        }
+        let authToken = try await authenticate()
 
-        let authToken = try await authenticate(session: session)
-
-        guard let url = URL(string: config.baseURLString + "/System/Info") else {
-            throw ServiceError.invalidURL
-        }
+        let url = try config.url(appending: "/System/Info")
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -56,43 +71,44 @@ final class JellyfinClient: ServiceClient {
         }
     }
 
-    private func authenticate(session: URLSession) async throws -> String {
-        guard let url = URL(string: config.baseURLString + "/Users/AuthenticateByName") else {
-            throw ServiceError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        
-        let deviceId = UUID().uuidString
-        let authHeader =
-            "MediaBrowser Client=\"Labby\", Device=\"iOS\", DeviceId=\"\(deviceId)\", Version=\"0.0.1\""
-        request.setValue(authHeader, forHTTPHeaderField: "Authorization")
-
-        switch config.auth {
-        case .apiToken(let secretKey):
+    private func authenticate() async throws -> String {
+        // API token path: read and return without network round-trip
+        if case .apiToken(let secretKey) = config.auth {
             guard let tokenData = KeychainStorage.shared.loadSecret(forKey: secretKey),
                 let token = String(data: tokenData, encoding: .utf8)
             else {
                 throw ServiceError.missingSecret
             }
             return token
-            
+        }
+
+        // Username/password flow: POST to /Users/AuthenticateByName
+        let url = try config.url(appending: "/Users/AuthenticateByName")
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        let deviceId = Self.stableDeviceId()
+        let authHeader =
+            "MediaBrowser Client=\"Labby\", Device=\"iOS\", DeviceId=\"\(deviceId)\", Version=\"0.0.1\""
+        request.setValue(authHeader, forHTTPHeaderField: "Authorization")
+
+        switch config.auth {
         case .usernamePassword(let username, let passwordKey):
             guard let passData = KeychainStorage.shared.loadSecret(forKey: passwordKey),
                 let password = String(data: passData, encoding: .utf8)
             else {
                 throw ServiceError.missingSecret
             }
-            
+
             let authBody: [String: Any] = [
                 "Username": username,
                 "Pw": password,
             ]
             request.httpBody = try JSONSerialization.data(withJSONObject: authBody)
-            
+
             let (data, response) = try await session.data(for: request)
 
             guard let http = response as? HTTPURLResponse else {
@@ -102,7 +118,7 @@ final class JellyfinClient: ServiceClient {
             guard 200..<300 ~= http.statusCode else {
                 throw ServiceError.httpStatus(http.statusCode)
             }
-            
+
             struct AuthResponse: Codable {
                 let AccessToken: String?
                 let User: UserInfo?
@@ -110,33 +126,23 @@ final class JellyfinClient: ServiceClient {
             struct UserInfo: Codable {
                 let Name: String?
             }
-            
+
             let authResponse = try JSONDecoder().decode(AuthResponse.self, from: data)
             guard let accessToken = authResponse.AccessToken else {
                 throw ServiceError.unknown
             }
-            
+
             return accessToken
-            
+
         default:
             throw ServiceError.unknown
         }
     }
 
     func fetchStats() async throws -> ServiceStatsPayload {
-        let session: URLSession
-        if config.insecureSkipTLSVerify {
-            session = URLSession(
-                configuration: .ephemeral, delegate: InsecureSessionDelegate(), delegateQueue: nil)
-        } else {
-            session = URLSession(configuration: .ephemeral)
-        }
+        let authToken = try await authenticate()
 
-        let authToken = try await authenticate(session: session)
-
-        guard let url = URL(string: config.baseURLString + "/Items/Counts") else {
-            throw ServiceError.invalidURL
-        }
+        let url = try config.url(appending: "/Items/Counts")
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
