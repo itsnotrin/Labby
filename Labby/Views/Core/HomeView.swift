@@ -72,6 +72,16 @@ struct HomeView: View {
                         onStats: { serviceId, payload in
                             stats[serviceId] = payload
                         },
+                        onMove: { sourceId, targetId in
+                            var layout = layoutStore.layout(for: selectedHome)
+                            guard
+                                let sourceIndex = layout.widgets.firstIndex(where: { $0.id == sourceId }),
+                                let targetIndex = layout.widgets.firstIndex(where: { $0.id == targetId })
+                            else { return }
+                            let adjustedIndex = sourceIndex < targetIndex ? max(0, targetIndex - 1) : targetIndex
+                            layout.moveWidget(id: sourceId, to: adjustedIndex)
+                            layoutStore.setLayout(layout)
+                        },
                         showServiceStats: showServiceStats,
                         shouldSelfFetch: false
                     )
@@ -558,6 +568,7 @@ struct HomeView: View {
         let stats: [UUID: ServiceStatsPayload]
         let onEditWidget: (HomeWidget) -> Void
         let onStats: (UUID, ServiceStatsPayload) -> Void
+        let onMove: (UUID, UUID) -> Void
         let showServiceStats: Bool
         let shouldSelfFetch: Bool
 
@@ -593,7 +604,7 @@ struct HomeView: View {
                             if let cfg = services.first(where: {
                                 $0.id == w.serviceId && $0.home == selectedHome
                             }) {
-                                HomeWidgetCard(
+                                let base = HomeWidgetCard(
                                     widget: w,
                                     config: cfg,
                                     stats: stats[w.serviceId],
@@ -603,7 +614,22 @@ struct HomeView: View {
                                     showServiceStats: showServiceStats,
                                     shouldSelfFetch: shouldSelfFetch
                                 )
-                                .gridCellColumns(2)
+                                let view = isEditingLayout
+                                    ? AnyView(
+                                        base
+                                            .onDrag { NSItemProvider(object: w.id.uuidString as NSString) }
+                                            .dropDestination(for: String.self) { items, _ in
+                                                if let first = items.first,
+                                                   let sourceId = UUID(uuidString: first),
+                                                   sourceId != w.id {
+                                                    onMove(sourceId, w.id)
+                                                }
+                                                return true
+                                            }
+                                    )
+                                    : AnyView(base)
+                                view
+                                    .gridCellColumns(2)
                             } else {
                                 Color.clear
                                     .gridCellColumns(2)
@@ -614,7 +640,7 @@ struct HomeView: View {
                                 if let cfg = services.first(where: {
                                     $0.id == w.serviceId && $0.home == selectedHome
                                 }) {
-                                    HomeWidgetCard(
+                                    let base = HomeWidgetCard(
                                         widget: w,
                                         config: cfg,
                                         stats: stats[w.serviceId],
@@ -624,6 +650,20 @@ struct HomeView: View {
                                         showServiceStats: showServiceStats,
                                         shouldSelfFetch: shouldSelfFetch
                                     )
+                                    if isEditingLayout {
+                                        base
+                                            .onDrag { NSItemProvider(object: w.id.uuidString as NSString) }
+                                            .dropDestination(for: String.self) { items, _ in
+                                                if let first = items.first,
+                                                   let sourceId = UUID(uuidString: first),
+                                                   sourceId != w.id {
+                                                    onMove(sourceId, w.id)
+                                                }
+                                                return true
+                                            }
+                                    } else {
+                                        base
+                                    }
                                 } else {
                                     Color.clear
                                 }
