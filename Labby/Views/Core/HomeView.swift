@@ -594,6 +594,39 @@ struct HomeView: View {
             return out
         }
 
+        struct ReorderableCard<Content: View>: View {
+            let id: UUID
+            let isEditing: Bool
+            let onMove: (UUID, UUID) -> Void
+            @ViewBuilder let content: () -> Content
+            @State private var isTargeted = false
+
+            var body: some View {
+                let view = content()
+                if isEditing {
+                    view
+                        .onDrag { NSItemProvider(object: id.uuidString as NSString) }
+                        .dropDestination(for: String.self) { items, _ in
+                            if let first = items.first,
+                               let sourceId = UUID(uuidString: first),
+                               sourceId != id {
+                                onMove(sourceId, id)
+                            }
+                            return true
+                        } isTargeted: { over in
+                            isTargeted = over
+                        }
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .strokeBorder(isTargeted ? Color.accentColor : .clear,
+                                              style: StrokeStyle(lineWidth: 3, dash: [6]))
+                        )
+                } else {
+                    view
+                }
+            }
+        }
+
         var body: some View {
             Grid(horizontalSpacing: 16, verticalSpacing: 16) {
                 ForEach(rows.indices, id: \.self) { index in
@@ -604,32 +637,19 @@ struct HomeView: View {
                             if let cfg = services.first(where: {
                                 $0.id == w.serviceId && $0.home == selectedHome
                             }) {
-                                let base = HomeWidgetCard(
-                                    widget: w,
-                                    config: cfg,
-                                    stats: stats[w.serviceId],
-                                    isEditing: isEditingLayout,
-                                    onEdit: { onEditWidget(w) },
-                                    onStats: { payload in onStats(w.serviceId, payload) },
-                                    showServiceStats: showServiceStats,
-                                    shouldSelfFetch: shouldSelfFetch
-                                )
-                                let view = isEditingLayout
-                                    ? AnyView(
-                                        base
-                                            .onDrag { NSItemProvider(object: w.id.uuidString as NSString) }
-                                            .dropDestination(for: String.self) { items, _ in
-                                                if let first = items.first,
-                                                   let sourceId = UUID(uuidString: first),
-                                                   sourceId != w.id {
-                                                    onMove(sourceId, w.id)
-                                                }
-                                                return true
-                                            }
+                                ReorderableCard(id: w.id, isEditing: isEditingLayout, onMove: onMove) {
+                                    HomeWidgetCard(
+                                        widget: w,
+                                        config: cfg,
+                                        stats: stats[w.serviceId],
+                                        isEditing: isEditingLayout,
+                                        onEdit: { onEditWidget(w) },
+                                        onStats: { payload in onStats(w.serviceId, payload) },
+                                        showServiceStats: showServiceStats,
+                                        shouldSelfFetch: shouldSelfFetch
                                     )
-                                    : AnyView(base)
-                                view
-                                    .gridCellColumns(2)
+                                }
+                                .gridCellColumns(2)
                             } else {
                                 Color.clear
                                     .gridCellColumns(2)
@@ -640,29 +660,17 @@ struct HomeView: View {
                                 if let cfg = services.first(where: {
                                     $0.id == w.serviceId && $0.home == selectedHome
                                 }) {
-                                    let base = HomeWidgetCard(
-                                        widget: w,
-                                        config: cfg,
-                                        stats: stats[w.serviceId],
-                                        isEditing: isEditingLayout,
-                                        onEdit: { onEditWidget(w) },
-                                        onStats: { payload in onStats(w.serviceId, payload) },
-                                        showServiceStats: showServiceStats,
-                                        shouldSelfFetch: shouldSelfFetch
-                                    )
-                                    if isEditingLayout {
-                                        base
-                                            .onDrag { NSItemProvider(object: w.id.uuidString as NSString) }
-                                            .dropDestination(for: String.self) { items, _ in
-                                                if let first = items.first,
-                                                   let sourceId = UUID(uuidString: first),
-                                                   sourceId != w.id {
-                                                    onMove(sourceId, w.id)
-                                                }
-                                                return true
-                                            }
-                                    } else {
-                                        base
+                                    ReorderableCard(id: w.id, isEditing: isEditingLayout, onMove: onMove) {
+                                        HomeWidgetCard(
+                                            widget: w,
+                                            config: cfg,
+                                            stats: stats[w.serviceId],
+                                            isEditing: isEditingLayout,
+                                            onEdit: { onEditWidget(w) },
+                                            onStats: { payload in onStats(w.serviceId, payload) },
+                                            showServiceStats: showServiceStats,
+                                            shouldSelfFetch: shouldSelfFetch
+                                        )
                                     }
                                 } else {
                                     Color.clear
