@@ -8,11 +8,9 @@
 import Foundation
 
 final class ProxmoxClient: ServiceClient {
-    private static var netSnapshots: [UUID: (ts: TimeInterval, inBytes: Int64, outBytes: Int64)] =
-        [:]
+    private static var netSnapshots: [UUID: (ts: TimeInterval, inBytes: Int64, outBytes: Int64)] = [:]
     let config: ServiceConfig
 
-    // Reuse a single URLSession per client (respecting insecure TLS option)
     private lazy var session: URLSession = {
         if config.insecureSkipTLSVerify {
             return URLSession(
@@ -29,7 +27,6 @@ final class ProxmoxClient: ServiceClient {
         self.config = config
     }
 
-    // Build an authorized JSON request with safe URL composition
     private func makeRequest(
         path: String,
         method: String = "GET",
@@ -119,7 +116,6 @@ final class ProxmoxClient: ServiceClient {
             var totalNetOut: Int64 = 0
 
             do {
-                // Fetch VM/LXC resources (optional best-effort)
                 let vmRequest = try makeRequest(
                     path: "/api2/json/cluster/resources",
                     queryItems: [URLQueryItem(name: "type", value: "vm")]
@@ -151,7 +147,6 @@ final class ProxmoxClient: ServiceClient {
                 totalNetIn = vmDecoded.data.compactMap { $0.netin }.reduce(0, +)
                 totalNetOut = vmDecoded.data.compactMap { $0.netout }.reduce(0, +)
             } catch {
-                // Ignore errors from this optional stats fetch
             }
 
             let now = Date().timeIntervalSince1970
@@ -163,14 +158,11 @@ final class ProxmoxClient: ServiceClient {
                 if dt > 0 {
                     let dIn = Double(totalNetIn - prev.inBytes)
                     let dOut = Double(totalNetOut - prev.outBytes)
-                    // Ensure non-negative (counters can reset on reboot)
                     downBps = max(0, dIn / dt)
                     upBps = max(0, dOut / dt)
                 }
             }
-            ProxmoxClient.netSnapshots[config.id] = (
-                ts: now, inBytes: totalNetIn, outBytes: totalNetOut
-            )
+            ProxmoxClient.netSnapshots[config.id] = (ts: now, inBytes: totalNetIn, outBytes: totalNetOut)
 
             let stats = ProxmoxStats(
                 cpuUsagePercent: avgCPU,

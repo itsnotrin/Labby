@@ -23,11 +23,13 @@ struct AddHomeView: View {
             Form {
                 Section(header: Text("New Home Details")) {
                     TextField("Home Name", text: $newHomeName)
-                        .textInputAutocapitalization(.words)
-                        .disableAutocorrection(true)
+                        .textContentType(.name)
                 }
             }
             .navigationTitle("Add New Home")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {

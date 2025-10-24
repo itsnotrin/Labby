@@ -41,7 +41,7 @@ enum AuthMethodType: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-// Auth configuration without embedding sensitive values directly.
+
 enum ServiceAuthConfig: Codable, Equatable {
     case apiToken(secretKeychainKey: String)
     case usernamePassword(username: String, passwordKeychainKey: String)
@@ -132,18 +132,11 @@ struct ServiceConfig: Identifiable, Codable, Equatable {
         self.baseURLString = try container.decode(String.self, forKey: .baseURLString)
         self.auth = try container.decode(ServiceAuthConfig.self, forKey: .auth)
         self.insecureSkipTLSVerify = try container.decode(Bool.self, forKey: .insecureSkipTLSVerify)
-        self.home =
-            try container.decodeIfPresent(String.self, forKey: .home) ?? ServiceConfig.defaultHome()
+        self.home = try container.decodeIfPresent(String.self, forKey: .home) ?? ServiceConfig.defaultHome()
     }
 }
 
 extension ServiceConfig {
-    /// Safely builds a URL by appending a path (and optional query items) to the baseURLString.
-    /// - Parameters:
-    ///   - path: The path to append. Leading "/" is optional and will be normalized.
-    ///   - queryItems: Optional query items to include.
-    /// - Throws: ServiceError.invalidURL when baseURLString or composed URL is invalid.
-    /// - Returns: A composed URL based on baseURLString.
     func url(appending path: String, queryItems: [URLQueryItem]? = nil) throws -> URL {
         guard var comps = URLComponents(string: baseURLString) else {
             throw ServiceError.invalidURL

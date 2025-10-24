@@ -12,21 +12,36 @@ import Foundation
 
 enum HomeWidgetSize: String, Codable, CaseIterable, Identifiable {
     case small  // 1x1
+    case medium // 1x2 (one column, two rows tall)
+    case wide   // 2x1 (two columns, one row)
     case large  // 2x2 (spans both columns and two rows)
+    case tall   // 1x3 (one column, three rows tall)
+    case extraWide // 2x3 (two columns, three rows)
+    case auto   // Dynamically sized based on content
 
     public var id: String { rawValue }
 
     public var columnSpan: Int {
         switch self {
         case .small: return 1
+        case .medium: return 1
+        case .wide: return 2
         case .large: return 2
+        case .tall: return 1
+        case .extraWide: return 2
+        case .auto: return 1 // Default to 1, will be dynamically adjusted
         }
     }
 
     public var rowSpan: Int {
         switch self {
         case .small: return 1
+        case .medium: return 2
+        case .wide: return 1
         case .large: return 2
+        case .tall: return 3
+        case .extraWide: return 3
+        case .auto: return 1 // Default to 1, will be dynamically adjusted
         }
     }
 }
@@ -50,6 +65,7 @@ enum ProxmoxMetric: String, Codable, CaseIterable, Identifiable {
 enum JellyfinMetric: String, Codable, CaseIterable, Identifiable {
     case tvShowsCount
     case moviesCount
+    case userCount
 
     public var id: String { rawValue }
 }
@@ -63,9 +79,8 @@ enum QBittorrentMetric: String, Codable, CaseIterable, Identifiable {
     public var id: String { rawValue }
 }
 
-// New: Pi-hole widget metrics
+
 enum PiHoleMetric: String, Codable, CaseIterable, Identifiable {
-    // Commonly useful fields
     case dnsQueriesToday
     case adsBlockedToday
     case adsPercentageToday
@@ -190,9 +205,11 @@ struct ProxmoxStats: Codable, Equatable {
 struct JellyfinStats: Codable, Equatable {
     public var tvShows: Int
     public var movies: Int
-    public init(tvShows: Int, movies: Int) {
+    public var users: Int
+    public init(tvShows: Int, movies: Int, users: Int = 0) {
         self.tvShows = tvShows
         self.movies = movies
+        self.users = users
     }
 }
 
@@ -212,7 +229,7 @@ struct QBittorrentStats: Codable, Equatable {
     }
 }
 
-// New: Pi-hole compact stats for widgets
+
 public struct PiHoleStats: Codable, Equatable {
     public var status: String?
     public var domainsBeingBlocked: Int
@@ -293,22 +310,20 @@ enum ServiceStatsPayload: Codable, Equatable {
 }
 
 // MARK: - Widget Model
-
-/// Represents a widget rendered on the Home grid for a specific service.
 struct HomeWidget: Identifiable, Codable, Equatable {
     public var id: UUID
     public var serviceId: UUID
 
-    // Layout
+
     public var size: HomeWidgetSize
     public var row: Int  // top-left row anchor
     public var column: Int  // top-left column anchor (0 or 1 in a 2-column grid)
 
-    // Display
+
     public var titleOverride: String?
     public var metrics: WidgetMetricsSelection
 
-    // Refresh
+
     public var refreshIntervalOverride: Double?
 
     public init(
@@ -332,9 +347,9 @@ struct HomeWidget: Identifiable, Codable, Equatable {
         normalizeColumnForSize()
     }
 
-    // For a 2-column grid, a large widget must start at column 0 to span both columns.
+
     public mutating func normalizeColumnForSize() {
-        if size == .large {
+        if size.columnSpan > 1 {
             column = 0
         } else {
             column = max(0, min(1, column))
@@ -346,9 +361,6 @@ struct HomeWidget: Identifiable, Codable, Equatable {
 }
 
 // MARK: - Home Layout
-
-/// A full layout for a given home (by name), containing ordered widgets.
-/// Widgets are placed on a 2-column grid using their row/column anchors and spans.
 struct HomeLayout: Codable, Equatable {
     public var homeName: String
     public var widgets: [HomeWidget]
@@ -362,8 +374,7 @@ struct HomeLayout: Codable, Equatable {
         }
     }
 
-    /// Rearranges widgets in a simple top-to-bottom flow, honoring widget sizes (2-column grid).
-    /// Large: spans both columns for two rows; Small: occupies one cell.
+
     mutating func autoArrangeTwoColumns() {
         var arranged: [HomeWidget] = []
         var currentRow = 0
@@ -371,14 +382,16 @@ struct HomeLayout: Codable, Equatable {
 
         for var w in widgets {
             w.normalizeColumnForSize()
-            if w.size == .large {
-                // Place at start of a row, span both columns and two rows
+            if w.size.columnSpan > 1 {
+                if currentCol != 0 {
+                    currentRow += 1
+                    currentCol = 0
+                }
                 w.row = currentRow
                 w.column = 0
-                currentRow += 2
+                currentRow += w.size.rowSpan
                 currentCol = 0
             } else {
-                // Place in current cell
                 w.row = currentRow
                 w.column = currentCol
                 currentCol += 1
@@ -393,36 +406,207 @@ struct HomeLayout: Codable, Equatable {
         self.widgets = arranged
     }
 
-    /// Ensures all widgets have valid columns for their size and de-duplicates overlaps naively by auto arranging.
+
+    mutating func autoArrangeFlexible() {
+        var arranged: [HomeWidget] = []
+        var currentRow = 0
+        var currentCol = 0
+
+        for var w in widgets {
+            if w.size == .auto {
+                w.size = determineOptimalSizeForWidget(w)
+            }
+
+            w.normalizeColumnForSize()
+
+            if w.size == .large {
+                if currentCol != 0 {
+                    currentRow += 1
+                    currentCol = 0
+                }
+                w.row = currentRow
+                w.column = 0
+                currentRow += 2
+                currentCol = 0
+            } else {
+                w.row = currentRow
+                w.column = currentCol
+                currentCol += 1
+                if currentCol >= 2 {
+                    currentCol = 0
+                    currentRow += 1
+                }
+            }
+            arranged.append(w)
+        }
+
+        self.widgets = arranged
+    }
+
+
+    mutating func autoArrangeSmart() {
+        var arranged: [HomeWidget] = []
+        var currentRow = 0
+
+
+        for var w in widgets {
+            if w.size == .auto {
+                w.size = determineOptimalSizeForWidget(w)
+            }
+            arranged.append(w)
+        }
+
+
+        arranged.sort { widget1, widget2 in
+            if widget1.size.columnSpan > 1 && widget2.size.columnSpan == 1 {
+                return true
+            } else if widget1.size.columnSpan == 1 && widget2.size.columnSpan > 1 {
+                return false
+            }
+
+            return widget1.size.rowSpan > widget2.size.rowSpan
+        }
+
+
+        var finalArranged: [HomeWidget] = []
+        var singleColumnBuffer: [HomeWidget] = []
+
+        for var w in arranged {
+            w.normalizeColumnForSize()
+
+            if w.size.columnSpan > 1 {
+                if singleColumnBuffer.count == 1 {
+                    var buffered = singleColumnBuffer[0]
+                    buffered.row = currentRow
+                    buffered.column = 0
+                    finalArranged.append(buffered)
+                    currentRow += buffered.size.rowSpan
+                    singleColumnBuffer.removeAll()
+                } else if singleColumnBuffer.count >= 2 {
+                    for i in stride(from: 0, to: singleColumnBuffer.count, by: 2) {
+                        var w1 = singleColumnBuffer[i]
+                        w1.row = currentRow
+                        w1.column = 0
+                        finalArranged.append(w1)
+
+                        if i + 1 < singleColumnBuffer.count {
+                            var w2 = singleColumnBuffer[i + 1]
+                            w2.row = currentRow
+                            w2.column = 1
+                            finalArranged.append(w2)
+                        }
+                        let maxRowSpan = max(w1.size.rowSpan, (i + 1 < singleColumnBuffer.count) ? singleColumnBuffer[i + 1].size.rowSpan : 1)
+                        currentRow += maxRowSpan
+                    }
+                    singleColumnBuffer.removeAll()
+                }
+                w.row = currentRow
+                w.column = 0
+                currentRow += w.size.rowSpan
+                finalArranged.append(w)
+            } else {
+                singleColumnBuffer.append(w)
+
+
+                if singleColumnBuffer.count == 2 {
+                    var w1 = singleColumnBuffer[0]
+                    var w2 = singleColumnBuffer[1]
+                    w1.row = currentRow
+                    w1.column = 0
+                    w2.row = currentRow
+                    w2.column = 1
+                    finalArranged.append(w1)
+                    finalArranged.append(w2)
+
+                    let maxRowSpan = max(w1.size.rowSpan, w2.size.rowSpan)
+                    currentRow += maxRowSpan
+                    singleColumnBuffer.removeAll()
+                }
+            }
+        }
+
+
+        for (index, var w) in singleColumnBuffer.enumerated() {
+            w.row = currentRow
+            w.column = index % 2
+            finalArranged.append(w)
+            if index % 2 == 1 {
+                currentRow += max(w.size.rowSpan, singleColumnBuffer[index - 1].size.rowSpan)
+            } else if index == singleColumnBuffer.count - 1 {
+                currentRow += w.size.rowSpan
+            }
+        }
+
+        self.widgets = finalArranged
+    }
+
+
+    private func determineOptimalSizeForWidget(_ widget: HomeWidget) -> HomeWidgetSize {
+        switch widget.metrics {
+        case .proxmox(let metrics):
+            let hasDetailedMetrics = metrics.contains(.memoryUsedBytes) || metrics.contains(.netUpBps) || metrics.contains(.netDownBps)
+            if metrics.count > 5 {
+                return .extraWide
+            } else if metrics.count > 3 || hasDetailedMetrics {
+                return .large
+            } else if metrics.count > 1 {
+                return .medium
+            } else {
+                return .small
+            }
+        case .pihole(let metrics):
+            let hasDetailedMetrics = metrics.contains(.gravityLastUpdatedRelative) || metrics.contains(.domainsBeingBlocked)
+            if metrics.count > 5 {
+                return .large
+            } else if metrics.count > 3 || hasDetailedMetrics {
+                return .medium
+            } else {
+                return .small
+            }
+        case .jellyfin(let metrics):
+            return metrics.count >= 3 ? .medium : .small
+        case .qbittorrent(let metrics):
+            let hasSpeedMetrics = metrics.contains(.uploadSpeedBytesPerSec) || metrics.contains(.downloadSpeedBytesPerSec)
+            if metrics.count > 2 && hasSpeedMetrics {
+                return .wide
+            } else if hasSpeedMetrics {
+                return .medium
+            } else {
+                return .small
+            }
+        }
+    }
+
+
     mutating func normalize() {
         for i in widgets.indices {
             widgets[i].normalizeColumnForSize()
             widgets[i].row = max(0, widgets[i].row)
         }
-        // A simple approach to avoid overlap issues:
+
         autoArrangeTwoColumns()
     }
 
-    /// Adds a widget and normalizes layout.
+
     mutating func addWidget(_ widget: HomeWidget) {
         widgets.append(widget)
         normalize()
     }
 
-    /// Removes a widget by id and normalizes layout.
+
     mutating func removeWidget(id: UUID) {
         widgets.removeAll { $0.id == id }
         normalize()
     }
 
-    /// Updates a widget if found (matching id) and normalizes layout.
+
     mutating func updateWidget(_ widget: HomeWidget) {
         guard let idx = widgets.firstIndex(where: { $0.id == widget.id }) else { return }
         widgets[idx] = widget
         normalize()
     }
 
-    /// Moves a widget to a new index and normalizes layout.
+
     mutating func moveWidget(id: UUID, to newIndex: Int) {
         guard let currentIndex = widgets.firstIndex(where: { $0.id == id }) else { return }
         let clampedIndex = max(0, min(newIndex, max(0, widgets.count - 1)))
@@ -431,45 +615,132 @@ struct HomeLayout: Codable, Equatable {
         widgets.insert(item, at: clampedIndex)
         normalize()
     }
+
+
+    mutating func applyAutoLayout(services: [ServiceConfig]) {
+
+        for i in widgets.indices {
+            let widget = widgets[i]
+            if let service = services.first(where: { $0.id == widget.serviceId }) {
+                let optimalSize = HomeLayoutDefaults.determineOptimalSize(for: service.kind)
+                widgets[i].size = optimalSize
+                widgets[i].metrics = HomeLayoutDefaults.defaultMetrics(for: service.kind, size: optimalSize)
+            }
+        }
+
+
+        let existingServiceIds = Set(widgets.map { $0.serviceId })
+        for service in services where service.home == homeName && !existingServiceIds.contains(service.id) {
+            let optimalSize = HomeLayoutDefaults.determineOptimalSize(for: service.kind)
+            let newWidget = HomeWidget(
+                serviceId: service.id,
+                size: optimalSize,
+                row: 0,
+                column: 0,
+                titleOverride: nil,
+                metrics: HomeLayoutDefaults.defaultMetrics(for: service.kind, size: optimalSize)
+            )
+            widgets.append(newWidget)
+        }
+
+
+        autoArrangeSmart()
+    }
+
+
+    static func validateWidgetSize(_ size: HomeWidgetSize, for metrics: WidgetMetricsSelection, serviceKind: ServiceKind, tolerance: Bool = true) -> Bool {
+        let estimatedLines = estimateContentLines(for: metrics, serviceKind: serviceKind)
+        let maxLines = maxLinesForSize(size)
+
+        if tolerance {
+            let toleranceLines = size == .small ? 1 : 2
+            return estimatedLines <= (maxLines + toleranceLines)
+        } else {
+            return estimatedLines <= maxLines
+        }
+    }
+
+
+    private static func estimateContentLines(for metrics: WidgetMetricsSelection, serviceKind: ServiceKind) -> Int {
+        let baseLines = 1
+
+        switch metrics {
+        case .proxmox(let metricsArray):
+            return baseLines + metricsArray.count
+        case .jellyfin(let metricsArray):
+            return baseLines + metricsArray.count
+        case .qbittorrent(let metricsArray):
+            return baseLines + metricsArray.count
+        case .pihole(let metricsArray):
+            return baseLines + metricsArray.count
+        }
+    }
+
+
+    private static func maxLinesForSize(_ size: HomeWidgetSize) -> Int {
+        switch size {
+        case .small: return 4
+        case .medium: return 7
+        case .wide: return 4
+        case .large: return 9
+        case .tall: return 12
+        case .extraWide: return 15
+        case .auto: return Int.max
+        }
+    }
+
+
+    static func minimumSizeForContent(_ metrics: WidgetMetricsSelection, serviceKind: ServiceKind, strict: Bool = false) -> HomeWidgetSize {
+        let contentLines = estimateContentLines(for: metrics, serviceKind: serviceKind)
+
+
+        let orderedSizes: [HomeWidgetSize] = [.small, .medium, .wide, .large, .tall, .extraWide]
+
+        for size in orderedSizes {
+            let maxLines = maxLinesForSize(size)
+            let threshold = strict ? maxLines : maxLines + (size == .small ? 1 : 2)
+            if threshold >= contentLines {
+                return size
+            }
+        }
+
+        return .extraWide
+    }
 }
 
 // MARK: - Defaults and Utilities
 
 enum HomeLayoutDefaults {
-    /// Provide sensible default metrics for each kind and size.
+
     static func defaultMetrics(for kind: ServiceKind, size: HomeWidgetSize = .small)
         -> WidgetMetricsSelection
     {
         switch kind {
         case .proxmox:
             if size == .large {
-                // Large default: CPU %, Memory %, Running, Net Up/Down
                 return .proxmox([
                     .cpuPercent, .memoryPercent, .runningCount, .netUpBps, .netDownBps,
                 ])
             } else {
-                // Small default: CPU % and Memory Used
                 return .proxmox([.cpuPercent, .memoryUsedBytes])
             }
         case .jellyfin:
-            return .jellyfin([.tvShowsCount, .moviesCount])
+            return .jellyfin([.tvShowsCount, .moviesCount, .userCount])
         case .qbittorrent:
             return .qbittorrent([.seedingCount, .downloadingCount])
         case .pihole:
             if size == .large {
-                // Large default: broader overview
                 return .pihole([
                     .dnsQueriesToday, .adsBlockedToday, .adsPercentageToday, .uniqueClients,
                     .queriesForwarded, .queriesCached, .blockingStatus,
                 ])
             } else {
-                // Small default: simple blocked vs total percentage
                 return .pihole([.blockingStatus, .adsBlockedToday, .adsPercentageToday])
             }
         }
     }
 
-    /// Creates a default small widget for a service with metrics defaulted per kind.
+
     static func defaultWidget(for service: ServiceConfig) -> HomeWidget {
         HomeWidget(
             serviceId: service.id,
@@ -481,7 +752,7 @@ enum HomeLayoutDefaults {
         )
     }
 
-    /// Generates a basic layout (small widgets flowing top-to-bottom) for given services.
+
     static func generateLayout(homeName: String, services: [ServiceConfig]) -> HomeLayout {
         var layout = HomeLayout(homeName: homeName)
         for svc in services where svc.home == homeName {
@@ -490,17 +761,49 @@ enum HomeLayoutDefaults {
         layout.autoArrangeTwoColumns()
         return layout
     }
+
+
+    static func generateAutoLayout(homeName: String, services: [ServiceConfig]) -> HomeLayout {
+        var layout = HomeLayout(homeName: homeName)
+        for svc in services where svc.home == homeName {
+            let autoWidget = HomeWidget(
+                serviceId: svc.id,
+                size: .auto,
+                row: 0,
+                column: 0,
+                titleOverride: nil,
+                metrics: defaultMetrics(for: svc.kind, size: determineOptimalSize(for: svc.kind))
+            )
+            layout.widgets.append(autoWidget)
+        }
+        layout.autoArrangeSmart()
+        return layout
+    }
+
+
+    static func determineOptimalSize(for kind: ServiceKind) -> HomeWidgetSize {
+        switch kind {
+        case .proxmox:
+            return .extraWide
+        case .pihole:
+            return .large
+        case .jellyfin:
+            return .medium
+        case .qbittorrent:
+            return .wide
+        }
+    }
 }
 
 // MARK: - Stats Formatting Helpers
 
 enum StatFormatter {
     private static let byteFormatter: ByteCountFormatter = {
-        let f = ByteCountFormatter()
-        f.countStyle = .binary
-        f.includesUnit = true
-        f.isAdaptive = true
-        return f
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .binary
+        formatter.includesUnit = true
+        formatter.isAdaptive = true
+        return formatter
     }()
 
     static func formatPercent(_ value: Double) -> String {
@@ -512,16 +815,13 @@ enum StatFormatter {
     }
 
     static func formatRateBytesPerSec(_ bytesPerSec: Double) -> String {
-        // e.g., "12.3 MB/s"
-        let perSec = byteFormatter.string(fromByteCount: Int64(bytesPerSec)) + "/s"
-        return perSec
+        return byteFormatter.string(fromByteCount: Int64(bytesPerSec)) + "/s"
     }
 }
 
 // MARK: - Persistence Store
 
-/// Manages persistence of layouts keyed by home name.
-/// Uses UserDefaults with JSON-encoded dictionary [homeName: HomeLayout].
+
 final class HomeLayoutStore: ObservableObject {
     static let shared = HomeLayoutStore()
 
@@ -572,7 +872,7 @@ final class HomeLayoutStore: ObservableObject {
         persist()
     }
 
-    // MARK: Persistence
+    // MARK: - Persistence
 
     private func persist() {
         do {

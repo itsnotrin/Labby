@@ -199,6 +199,9 @@ struct AddServiceView: View {
                 }
             }
             .navigationTitle("Add Service")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {

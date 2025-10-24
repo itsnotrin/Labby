@@ -11,7 +11,6 @@ import Security
 final class KeychainStorage {
     static let shared = KeychainStorage()
     private init() {}
-    // Namespace keychain items to this app for isolation
     private let serviceName: String = Bundle.main.bundleIdentifier ?? "Labby"
 
     func saveSecret(_ data: Data, forKey key: String) -> Bool {
@@ -30,7 +29,6 @@ final class KeychainStorage {
         ]
         var status = SecItemAdd(attrs as CFDictionary, nil)
         if status == errSecDuplicateItem {
-            // Update existing secret
             let query: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
                 kSecAttrService as String: serviceName,

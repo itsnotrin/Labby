@@ -47,10 +47,37 @@ struct ServicesView: View {
                 } else {
                     Section {
                         ForEach(filteredServices) { config in
-                            ServiceRowView(config: config, isTesting: testingServiceId == config.id)
-                            {
-                                Task {
-                                    await testConnection(config)
+                            if config.kind == .qbittorrent {
+                                NavigationLink {
+                                    QBittorrentView(config: config)
+                                } label: {
+                                    ServiceRowView(
+                                        config: config,
+                                        isTesting: testingServiceId == config.id,
+                                        asButton: false,
+                                        showChevron: false
+                                    ) {
+                                        // No-op in NavigationLink label
+                                    }
+                                }
+                            } else if config.kind == .jellyfin {
+                                NavigationLink {
+                                    JellyfinView(config: config)
+                                } label: {
+                                    ServiceRowView(
+                                        config: config,
+                                        isTesting: testingServiceId == config.id,
+                                        asButton: false,
+                                        showChevron: false
+                                    ) {
+                                        // No-op in NavigationLink label
+                                    }
+                                }
+                            } else {
+                                ServiceRowView(config: config, isTesting: testingServiceId == config.id) {
+                                    Task {
+                                        await testConnection(config)
+                                    }
                                 }
                             }
                         }
@@ -119,51 +146,77 @@ struct ServicesView: View {
 struct ServiceRowView: View {
     let config: ServiceConfig
     let isTesting: Bool
+    let asButton: Bool
+    let showChevron: Bool
     let onTest: () -> Void
 
+    init(config: ServiceConfig, isTesting: Bool, onTest: @escaping () -> Void) {
+        self.config = config
+        self.isTesting = isTesting
+        self.asButton = true
+        self.showChevron = true
+        self.onTest = onTest
+    }
+
+    init(config: ServiceConfig, isTesting: Bool, asButton: Bool, showChevron: Bool = true, onTest: @escaping () -> Void) {
+        self.config = config
+        self.isTesting = isTesting
+        self.asButton = asButton
+        self.showChevron = showChevron
+        self.onTest = onTest
+    }
+
     var body: some View {
-        Button(action: {
-            onTest()
-        }) {
-            HStack {
-                serviceIcon
-                    .font(.title2)
-                    .foregroundStyle(.secondary)
-
-                VStack(alignment: .leading) {
-                    Text(config.displayName)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                    HStack(spacing: 8) {
-                        Text(config.kind.displayName)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        HStack(spacing: 4) {
-                            Image(systemName: "house.fill")
-                            Text(config.home)
-                        }
-                        .font(.caption2)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.secondary.opacity(0.15))
-                        .clipShape(Capsule())
-                    }
+        Group {
+            if asButton {
+                Button(action: { onTest() }) {
+                    rowContent
                 }
+                .buttonStyle(.plain)
+            } else {
+                rowContent
+            }
+        }
+    }
 
-                Spacer()
+    private var rowContent: some View {
+        HStack {
+            serviceIcon
+                .font(.title2)
+                .foregroundStyle(.secondary)
 
-                if isTesting {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                } else {
-                    Image(systemName: "chevron.right")
+            VStack(alignment: .leading) {
+                Text(config.displayName)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                HStack(spacing: 8) {
+                    Text(config.kind.displayName)
                         .font(.caption)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 4) {
+                        Image(systemName: "house.fill")
+                        Text(config.home)
+                    }
+                    .font(.caption2)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.secondary.opacity(0.15))
+                    .clipShape(Capsule())
                 }
             }
-            .padding(.vertical, 8)
+
+            Spacer()
+
+            if isTesting {
+                ProgressView()
+                    .scaleEffect(0.8)
+            } else if showChevron {
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
         }
-        .buttonStyle(.plain)
+        .padding(.vertical, 8)
     }
 
     private var serviceIcon: Image {

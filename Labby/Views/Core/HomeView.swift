@@ -29,6 +29,8 @@ struct HomeView: View {
     @State private var editingWidget: HomeWidget?
     @State private var stats: [UUID: ServiceStatsPayload] = [:]
     @State private var isPresentingAddWidget: Bool = false
+    @State private var showAutoLayoutAlert: Bool = false
+    @State private var isPresentingServicesView: Bool = false
 
     private var filteredServices: [ServiceConfig] {
         serviceManager.services.filter { $0.home == selectedHome }
@@ -90,7 +92,14 @@ struct HomeView: View {
                 )
                 HomeToolbarTrailing(
                     isEditingLayout: $isEditingLayout,
-                    isPresentingAddWidget: $isPresentingAddWidget
+                    isPresentingAddWidget: $isPresentingAddWidget,
+                    isPresentingServicesView: $isPresentingServicesView,
+                    onAutoLayout: {
+                        var layout = layoutStore.layout(for: selectedHome)
+                        layout.applyAutoLayout(services: serviceManager.services)
+                        layoutStore.setLayout(layout)
+                        showAutoLayoutAlert = true
+                    }
                 )
             }
         }
@@ -139,6 +148,14 @@ struct HomeView: View {
             } else if let error = testError {
                 Text(error)
             }
+        }
+        .alert("Auto Layout Applied", isPresented: $showAutoLayoutAlert) {
+            Button("OK") { }
+        } message: {
+            Text("Dashboard has been automatically organized with optimal widget sizes and layouts for all services.")
+        }
+        .sheet(isPresented: $isPresentingServicesView) {
+            ServicesView()
         }
         .onAppear {
             if let stored = UserDefaults.standard.string(forKey: "selectedHome") {
@@ -314,7 +331,20 @@ struct HomeView: View {
         @State private var isLoadingStats = false
 
         var body: some View {
-            let height: CGFloat = widget.size == .large ? 300 : 150
+            let height: CGFloat = {
+                switch widget.size {
+                case .small: return 120
+                case .medium: return 180
+                case .wide: return 140
+                case .large: return 240
+                case .tall: return 280
+                case .extraWide: return 320
+                case .auto: return 150
+                }
+            }()
+
+            let contentOverflows = !HomeLayout.validateWidgetSize(widget.size, for: widget.metrics, serviceKind: config.kind, tolerance: false)
+
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Image(systemName: iconName(for: config.kind))
@@ -330,14 +360,28 @@ struct HomeView: View {
                     widget.titleOverride?.isEmpty == false
                         ? (widget.titleOverride ?? "") : config.displayName
                 )
-                .font(widget.size == .large ? .title2 : .headline)
+                .font({
+                    switch widget.size {
+                    case .small: return .subheadline
+                    case .medium, .wide: return .headline
+                    case .large, .tall, .extraWide: return .title2
+                    case .auto: return .headline
+                    }
+                }())
                 .foregroundStyle(.primary)
 
                 if showServiceStats {
                     VStack(alignment: .leading, spacing: 6) {
                         ForEach(statLines(), id: \.self) { line in
                             Text(line)
-                                .font(widget.size == .large ? .body : .subheadline)
+                                .font({
+                                    switch widget.size {
+                                    case .small: return .caption
+                                    case .medium, .wide: return .subheadline
+                                    case .large, .tall, .extraWide: return .body
+                                    case .auto: return .subheadline
+                                    }
+                                }())
                                 .foregroundStyle(.secondary)
                         }
                         if stats == nil {
@@ -372,7 +416,15 @@ struct HomeView: View {
             }
             .overlay {
                 RoundedRectangle(cornerRadius: 16)
-                    .strokeBorder(.quaternary, lineWidth: 0.5)
+                    .strokeBorder(contentOverflows ? Color.orange : Color(UIColor.quaternaryLabel), lineWidth: contentOverflows ? 2 : 0.5)
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if contentOverflows && !isEditing {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                        .padding(8)
+                }
             }
             .onTapGesture {
                 if isEditing { onEdit() }
@@ -445,6 +497,8 @@ struct HomeView: View {
                         lines.append("TV Shows: \(j.tvShows)")
                     case .moviesCount:
                         lines.append("Movies: \(j.movies)")
+                    case .userCount:
+                        lines.append("Users: \(j.users)")
                     }
                 }
                 return lines
@@ -559,13 +613,15 @@ struct HomeView: View {
             var out: [[HomeWidget]] = []
             var buffer: [HomeWidget] = []
             for w in widgets {
-                if w.size == .large {
+                if w.size.columnSpan > 1 {
+                    // Multi-column widgets (wide, large, extraWide) need their own row
                     if !buffer.isEmpty {
                         out.append(buffer)
                         buffer.removeAll()
                     }
                     out.append([w])
                 } else {
+                    // Single-column widgets (small, medium, tall) can share rows
                     buffer.append(w)
                     if buffer.count == 2 {
                         out.append(buffer)
@@ -620,29 +676,7 @@ struct HomeView: View {
                             if let cfg = services.first(where: {
                                 $0.id == w.serviceId && $0.home == selectedHome
                             }) {
-                                ReorderableCard(id: w.id, isEditing: isEditingLayout, onMove: onMove) {
-                                    HomeWidgetCard(
-                                        widget: w,
-                                        config: cfg,
-                                        stats: stats[w.serviceId],
-                                        isEditing: isEditingLayout,
-                                        onEdit: { onEditWidget(w) },
-                                        onStats: { payload in onStats(w.serviceId, payload) },
-                                        showServiceStats: showServiceStats,
-                                        shouldSelfFetch: shouldSelfFetch
-                                    )
-                                }
-                                .gridCellColumns(2)
-                            } else {
-                                Color.clear
-                                    .gridCellColumns(2)
-                            }
-                        } else {
-                            ForEach(row.indices, id: \.self) { idx in
-                                let w = row[idx]
-                                if let cfg = services.first(where: {
-                                    $0.id == w.serviceId && $0.home == selectedHome
-                                }) {
+                                if isEditingLayout {
                                     ReorderableCard(id: w.id, isEditing: isEditingLayout, onMove: onMove) {
                                         HomeWidgetCard(
                                             widget: w,
@@ -654,6 +688,90 @@ struct HomeView: View {
                                             showServiceStats: showServiceStats,
                                             shouldSelfFetch: shouldSelfFetch
                                         )
+                                    }
+                                    .gridCellColumns(w.size.columnSpan)
+                                } else {
+                                    if cfg.kind == .qbittorrent {
+                                        NavigationLink {
+                                            QBittorrentView(config: cfg)
+                                        } label: {
+                                            HomeWidgetCard(
+                                                widget: w,
+                                                config: cfg,
+                                                stats: stats[w.serviceId],
+                                                isEditing: isEditingLayout,
+                                                onEdit: { onEditWidget(w) },
+                                                onStats: { payload in onStats(w.serviceId, payload) },
+                                                showServiceStats: showServiceStats,
+                                                shouldSelfFetch: shouldSelfFetch
+                                            )
+                                        }
+                                        .gridCellColumns(w.size.columnSpan)
+                                    } else {
+                                        HomeWidgetCard(
+                                            widget: w,
+                                            config: cfg,
+                                            stats: stats[w.serviceId],
+                                            isEditing: isEditingLayout,
+                                            onEdit: { onEditWidget(w) },
+                                            onStats: { payload in onStats(w.serviceId, payload) },
+                                            showServiceStats: showServiceStats,
+                                            shouldSelfFetch: shouldSelfFetch
+                                        )
+                                        .gridCellColumns(w.size.columnSpan)
+                                    }
+                                }
+                            } else {
+                                Color.clear
+                                    .gridCellColumns(w.size.columnSpan)
+                            }
+                        } else {
+                            ForEach(row.indices, id: \.self) { idx in
+                                let w = row[idx]
+                                if let cfg = services.first(where: {
+                                    $0.id == w.serviceId && $0.home == selectedHome
+                                }) {
+                                    if isEditingLayout {
+                                        ReorderableCard(id: w.id, isEditing: isEditingLayout, onMove: onMove) {
+                                            HomeWidgetCard(
+                                                widget: w,
+                                                config: cfg,
+                                                stats: stats[w.serviceId],
+                                                isEditing: isEditingLayout,
+                                                onEdit: { onEditWidget(w) },
+                                                onStats: { payload in onStats(w.serviceId, payload) },
+                                                showServiceStats: showServiceStats,
+                                                shouldSelfFetch: shouldSelfFetch
+                                            )
+                                        }
+                                    } else {
+                                        if cfg.kind == .qbittorrent {
+                                            NavigationLink {
+                                                QBittorrentView(config: cfg)
+                                            } label: {
+                                                HomeWidgetCard(
+                                                    widget: w,
+                                                    config: cfg,
+                                                    stats: stats[w.serviceId],
+                                                    isEditing: isEditingLayout,
+                                                    onEdit: { onEditWidget(w) },
+                                                    onStats: { payload in onStats(w.serviceId, payload) },
+                                                    showServiceStats: showServiceStats,
+                                                    shouldSelfFetch: shouldSelfFetch
+                                                )
+                                            }
+                                        } else {
+                                            HomeWidgetCard(
+                                                widget: w,
+                                                config: cfg,
+                                                stats: stats[w.serviceId],
+                                                isEditing: isEditingLayout,
+                                                onEdit: { onEditWidget(w) },
+                                                onStats: { payload in onStats(w.serviceId, payload) },
+                                                showServiceStats: showServiceStats,
+                                                shouldSelfFetch: shouldSelfFetch
+                                            )
+                                        }
                                     }
                                 } else {
                                     Color.clear
@@ -689,10 +807,60 @@ struct HomeView: View {
                 Form {
                     Section("Widget") {
                         Picker("Size", selection: $workingWidget.size) {
-                            Text("Small (1x1)").tag(HomeWidgetSize.small)
-                            Text("Large (2x2)").tag(HomeWidgetSize.large)
+                            Text("Auto").tag(HomeWidgetSize.auto)
+
+                            Group {
+                                Text("Small (1x1)")
+                                    .foregroundStyle(HomeLayout.validateWidgetSize(.small, for: workingWidget.metrics, serviceKind: config.kind, tolerance: true) ? .primary : .secondary)
+                                    .tag(HomeWidgetSize.small)
+
+                                Text("Medium (1x2)")
+                                    .foregroundStyle(HomeLayout.validateWidgetSize(.medium, for: workingWidget.metrics, serviceKind: config.kind, tolerance: true) ? .primary : .secondary)
+                                    .tag(HomeWidgetSize.medium)
+
+                                Text("Wide (2x1)")
+                                    .foregroundStyle(HomeLayout.validateWidgetSize(.wide, for: workingWidget.metrics, serviceKind: config.kind, tolerance: true) ? .primary : .secondary)
+                                    .tag(HomeWidgetSize.wide)
+
+                                Text("Large (2x2)")
+                                    .foregroundStyle(HomeLayout.validateWidgetSize(.large, for: workingWidget.metrics, serviceKind: config.kind, tolerance: true) ? .primary : .secondary)
+                                    .tag(HomeWidgetSize.large)
+
+                                Text("Tall (1x3)")
+                                    .foregroundStyle(HomeLayout.validateWidgetSize(.tall, for: workingWidget.metrics, serviceKind: config.kind, tolerance: true) ? .primary : .secondary)
+                                    .tag(HomeWidgetSize.tall)
+
+                                Text("Extra Wide (2x3)")
+                                    .foregroundStyle(HomeLayout.validateWidgetSize(.extraWide, for: workingWidget.metrics, serviceKind: config.kind, tolerance: true) ? .primary : .secondary)
+                                    .tag(HomeWidgetSize.extraWide)
+                            }
                         }
-                        .pickerStyle(.segmented)
+                        .pickerStyle(.menu)
+                        .onChange(of: workingWidget.size) { _, newSize in
+                            if newSize == .auto {
+                                // Auto-determine optimal size and metrics
+                                let optimalSize = HomeLayoutDefaults.determineOptimalSize(for: config.kind)
+                                workingWidget.size = optimalSize
+                                workingWidget.metrics = HomeLayoutDefaults.defaultMetrics(for: config.kind, size: optimalSize)
+                            } else if !HomeLayout.validateWidgetSize(newSize, for: workingWidget.metrics, serviceKind: config.kind, tolerance: true) {
+                                // If selected size is too small, use minimum required size
+                                workingWidget.size = HomeLayout.minimumSizeForContent(workingWidget.metrics, serviceKind: config.kind, strict: false)
+                            }
+                        }
+
+                        if workingWidget.size == .auto {
+                            Text("Auto size automatically chooses the optimal widget size and metrics based on the service type and content.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            let isValidSize = HomeLayout.validateWidgetSize(workingWidget.size, for: workingWidget.metrics, serviceKind: config.kind, tolerance: true)
+                            if !isValidSize {
+                                let minSize = HomeLayout.minimumSizeForContent(workingWidget.metrics, serviceKind: config.kind, strict: false)
+                                Text("Current metrics require at least \(minSize.rawValue) size to display properly.")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            }
+                        }
 
                         TextField(
                             "Title (optional)",
@@ -706,6 +874,10 @@ struct HomeView: View {
                         Button("Restore Defaults") {
                             workingWidget.metrics = HomeLayoutDefaults.defaultMetrics(
                                 for: config.kind, size: workingWidget.size)
+                            // Validate size after metrics change
+                            if !HomeLayout.validateWidgetSize(workingWidget.size, for: workingWidget.metrics, serviceKind: config.kind, tolerance: false) {
+                                workingWidget.size = HomeLayout.minimumSizeForContent(workingWidget.metrics, serviceKind: config.kind, strict: false)
+                            }
                         }
                         switch config.kind {
                         case .proxmox:
@@ -720,11 +892,16 @@ struct HomeView: View {
                                             if on {
                                                 if !arr.contains(m) { arr.append(m) }
                                             } else {
-                                                arr.removeAll(where: { $0 == m })
+                                                arr.removeAll { $0 == m }
                                             }
                                             workingWidget.metrics = .proxmox(arr)
+                                            // Validate size after metrics change
+                                            if !HomeLayout.validateWidgetSize(workingWidget.size, for: workingWidget.metrics, serviceKind: config.kind, tolerance: false) {
+                                                workingWidget.size = HomeLayout.minimumSizeForContent(workingWidget.metrics, serviceKind: config.kind, strict: false)
+                                            }
                                         }
-                                    ))
+                                    )
+                                )
                             }
 
                         case .jellyfin:
@@ -739,11 +916,16 @@ struct HomeView: View {
                                             if on {
                                                 if !arr.contains(m) { arr.append(m) }
                                             } else {
-                                                arr.removeAll(where: { $0 == m })
+                                                arr.removeAll { $0 == m }
                                             }
                                             workingWidget.metrics = .jellyfin(arr)
+                                            // Validate size after metrics change
+                                            if !HomeLayout.validateWidgetSize(workingWidget.size, for: workingWidget.metrics, serviceKind: config.kind, tolerance: false) {
+                                                workingWidget.size = HomeLayout.minimumSizeForContent(workingWidget.metrics, serviceKind: config.kind, strict: false)
+                                            }
                                         }
-                                    ))
+                                    )
+                                )
                             }
 
                         case .qbittorrent:
@@ -758,11 +940,16 @@ struct HomeView: View {
                                             if on {
                                                 if !arr.contains(m) { arr.append(m) }
                                             } else {
-                                                arr.removeAll(where: { $0 == m })
+                                                arr.removeAll { $0 == m }
                                             }
                                             workingWidget.metrics = .qbittorrent(arr)
+                                            // Validate size after metrics change
+                                            if !HomeLayout.validateWidgetSize(workingWidget.size, for: workingWidget.metrics, serviceKind: config.kind, tolerance: false) {
+                                                workingWidget.size = HomeLayout.minimumSizeForContent(workingWidget.metrics, serviceKind: config.kind, strict: false)
+                                            }
                                         }
-                                    ))
+                                    )
+                                )
                             }
 
                         case .pihole:
@@ -777,11 +964,16 @@ struct HomeView: View {
                                             if on {
                                                 if !arr.contains(m) { arr.append(m) }
                                             } else {
-                                                arr.removeAll(where: { $0 == m })
+                                                arr.removeAll { $0 == m }
                                             }
                                             workingWidget.metrics = .pihole(arr)
+                                            // Validate size after metrics change
+                                            if !HomeLayout.validateWidgetSize(workingWidget.size, for: workingWidget.metrics, serviceKind: config.kind, tolerance: false) {
+                                                workingWidget.size = HomeLayout.minimumSizeForContent(workingWidget.metrics, serviceKind: config.kind, strict: false)
+                                            }
                                         }
-                                    ))
+                                    )
+                                )
                             }
                         }
                     }
@@ -830,6 +1022,9 @@ struct HomeView: View {
                     }
                 }
                 .navigationTitle("Edit Widget")
+                #if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+                #endif
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Cancel") { dismiss() }
@@ -879,6 +1074,7 @@ struct HomeView: View {
             switch m {
             case .tvShowsCount: return "TV Shows"
             case .moviesCount: return "Movies"
+            case .userCount: return "Users"
             }
         }
         private func labelForQB(_ m: QBittorrentMetric) -> String {
@@ -992,6 +1188,8 @@ struct HomeView: View {
     struct HomeToolbarTrailing: ToolbarContent {
         @Binding var isEditingLayout: Bool
         @Binding var isPresentingAddWidget: Bool
+        @Binding var isPresentingServicesView: Bool
+        let onAutoLayout: () -> Void
 
         var body: some ToolbarContent {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
@@ -1003,18 +1201,22 @@ struct HomeView: View {
                             ? "checkmark.seal.fill" : "rectangle.and.pencil.and.ellipsis")
                 }
 
-                if isEditingLayout {
-                    Button {
-                        isPresentingAddWidget = true
-                    } label: {
-                        Image(systemName: "plus.square.on.square")
+                Menu {
+                    Button("Auto Layout", systemImage: "square.grid.3x3.fill.square") {
+                        onAutoLayout()
                     }
-                } else {
-                    NavigationLink {
-                        ServicesView()
-                    } label: {
-                        Image(systemName: "plus")
+
+                    if isEditingLayout {
+                        Button("Add Widget", systemImage: "plus.square.on.square") {
+                            isPresentingAddWidget = true
+                        }
+                    } else {
+                        Button("Add Service", systemImage: "plus") {
+                            isPresentingServicesView = true
+                        }
                     }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
                 }
             }
         }
@@ -1026,7 +1228,7 @@ struct HomeView: View {
         let onAdd: (HomeWidget) -> Void
 
         @State private var selectedServiceId: UUID? = nil
-        @State private var size: HomeWidgetSize = .small
+        @State private var size: HomeWidgetSize = .auto
         @State private var title: String = ""
         @State private var proxmoxSelection: [ProxmoxMetric] = []
         @State private var jellyfinSelection: [JellyfinMetric] = []
@@ -1073,10 +1275,116 @@ struct HomeView: View {
 
                         Section("Widget") {
                             Picker("Size", selection: $size) {
-                                Text("Small (1x1)").tag(HomeWidgetSize.small)
-                                Text("Large (2x2)").tag(HomeWidgetSize.large)
+                                Text("Auto").tag(HomeWidgetSize.auto)
+
+                                if let config = selectedConfig {
+                                    let currentMetrics = getCurrentMetrics()
+
+                                    Group {
+                                        Text("Small (1x1)")
+                                            .foregroundStyle(HomeLayout.validateWidgetSize(.small, for: currentMetrics, serviceKind: config.kind, tolerance: true) ? .primary : .secondary)
+                                            .tag(HomeWidgetSize.small)
+
+                                        Text("Medium (1x2)")
+                                            .foregroundStyle(HomeLayout.validateWidgetSize(.medium, for: currentMetrics, serviceKind: config.kind, tolerance: true) ? .primary : .secondary)
+                                            .tag(HomeWidgetSize.medium)
+
+                                        Text("Wide (2x1)")
+                                            .foregroundStyle(HomeLayout.validateWidgetSize(.wide, for: currentMetrics, serviceKind: config.kind, tolerance: true) ? .primary : .secondary)
+                                            .tag(HomeWidgetSize.wide)
+
+                                        Text("Large (2x2)")
+                                            .foregroundStyle(HomeLayout.validateWidgetSize(.large, for: currentMetrics, serviceKind: config.kind, tolerance: true) ? .primary : .secondary)
+                                            .tag(HomeWidgetSize.large)
+
+                                        Text("Tall (1x3)")
+                                            .foregroundStyle(HomeLayout.validateWidgetSize(.tall, for: currentMetrics, serviceKind: config.kind, tolerance: true) ? .primary : .secondary)
+                                            .tag(HomeWidgetSize.tall)
+
+                                        Text("Extra Wide (2x3)")
+                                            .foregroundStyle(HomeLayout.validateWidgetSize(.extraWide, for: currentMetrics, serviceKind: config.kind, tolerance: true) ? .primary : .secondary)
+                                            .tag(HomeWidgetSize.extraWide)
+                                    }
+                                } else {
+                                    Text("Small (1x1)").tag(HomeWidgetSize.small)
+                                    Text("Medium (1x2)").tag(HomeWidgetSize.medium)
+                                    Text("Wide (2x1)").tag(HomeWidgetSize.wide)
+                                    Text("Large (2x2)").tag(HomeWidgetSize.large)
+                                    Text("Tall (1x3)").tag(HomeWidgetSize.tall)
+                                    Text("Extra Wide (2x3)").tag(HomeWidgetSize.extraWide)
+                                }
                             }
-                            .pickerStyle(.segmented)
+                            .pickerStyle(.menu)
+                            .onChange(of: size) { _, newSize in
+                                if newSize == .auto, let config = selectedConfig {
+                                    // Auto-determine optimal size and reset metrics
+                                    let optimalSize = HomeLayoutDefaults.determineOptimalSize(for: config.kind)
+                                    size = optimalSize
+                                    proxmoxSelection = []
+                                    jellyfinSelection = []
+                                    qbSelection = []
+                                    piholeSelection = []
+
+                                    // Set default metrics for the optimal size
+                                    let defaultMetrics = HomeLayoutDefaults.defaultMetrics(for: config.kind, size: optimalSize)
+                                    switch defaultMetrics {
+                                    case .proxmox(let metrics):
+                                        proxmoxSelection = metrics
+                                    case .jellyfin(let metrics):
+                                        jellyfinSelection = metrics
+                                    case .qbittorrent(let metrics):
+                                        qbSelection = metrics
+                                    case .pihole(let metrics):
+                                        piholeSelection = metrics
+                                    }
+                                } else if let config = selectedConfig {
+                                    // Validate size against current metrics
+                                    let currentMetrics = getCurrentMetrics()
+                                    if !HomeLayout.validateWidgetSize(newSize, for: currentMetrics, serviceKind: config.kind, tolerance: true) {
+                                        // If selected size is too small, use minimum required size
+                                        size = HomeLayout.minimumSizeForContent(currentMetrics, serviceKind: config.kind, strict: false)
+                                    }
+                                }
+                            }
+                            .onChange(of: selectedServiceId) { _, newServiceId in
+                                if size == .auto, let serviceId = newServiceId, let config = services.first(where: { $0.id == serviceId }) {
+                                    // Auto-determine optimal size and reset metrics when service changes
+                                    let optimalSize = HomeLayoutDefaults.determineOptimalSize(for: config.kind)
+                                    size = optimalSize
+                                    proxmoxSelection = []
+                                    jellyfinSelection = []
+                                    qbSelection = []
+                                    piholeSelection = []
+
+                                    // Set default metrics for the optimal size
+                                    let defaultMetrics = HomeLayoutDefaults.defaultMetrics(for: config.kind, size: optimalSize)
+                                    switch defaultMetrics {
+                                    case .proxmox(let metrics):
+                                        proxmoxSelection = metrics
+                                    case .jellyfin(let metrics):
+                                        jellyfinSelection = metrics
+                                    case .qbittorrent(let metrics):
+                                        qbSelection = metrics
+                                    case .pihole(let metrics):
+                                        piholeSelection = metrics
+                                    }
+                                }
+                            }
+
+                            if size == .auto {
+                                Text("Auto size automatically chooses the optimal widget size and metrics based on the service type and content.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else if let config = selectedConfig {
+                                let currentMetrics = getCurrentMetrics()
+                                let isValidSize = HomeLayout.validateWidgetSize(size, for: currentMetrics, serviceKind: config.kind, tolerance: true)
+                                if !isValidSize {
+                                    let minSize = HomeLayout.minimumSizeForContent(currentMetrics, serviceKind: config.kind, strict: false)
+                                    Text("Current metrics require at least \(minSize.rawValue) size to display properly.")
+                                        .font(.caption)
+                                        .foregroundStyle(.orange)
+                                }
+                            }
 
                             TextField("Title (optional)", text: $title)
                         }
@@ -1165,6 +1473,42 @@ struct HomeView: View {
                     }
                 }
             }
+            .navigationTitle("Add Widget")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        let newWidget = HomeWidget(
+                            serviceId: selectedServiceId!,
+                            size: size,
+                            row: 0,
+                            column: 0,
+                            titleOverride: title.isEmpty ? nil : title,
+                            metrics: {
+                                switch selectedConfig!.kind {
+                                case .proxmox:
+                                    return .proxmox(proxmoxSelection)
+                                case .jellyfin:
+                                    return .jellyfin(jellyfinSelection)
+                                case .qbittorrent:
+                                    return .qbittorrent(qbSelection)
+                                case .pihole:
+                                    return .pihole(piholeSelection)
+                                }
+                            }()
+                        )
+                        onAdd(newWidget)
+                        dismiss()
+                    }
+                    .disabled(!isSavable)
+                    .buttonStyle(.borderedProminent)
+                }
+            }
         }
 
         // Helper bindings extracted to simplify Toggle closures and improve type-check performance
@@ -1177,8 +1521,32 @@ struct HomeView: View {
                     } else {
                         proxmoxSelection.removeAll { $0 == m }
                     }
+                    // Validate size after metrics change
+                    if let config = selectedConfig {
+                        let currentMetrics = getCurrentMetrics()
+                        if !HomeLayout.validateWidgetSize(size, for: currentMetrics, serviceKind: config.kind, tolerance: false) {
+                            size = HomeLayout.minimumSizeForContent(currentMetrics, serviceKind: config.kind, strict: false)
+                        }
+                    }
                 }
             )
+        }
+
+        private func getCurrentMetrics() -> WidgetMetricsSelection {
+            guard let config = selectedConfig else {
+                return .proxmox([])
+            }
+
+            switch config.kind {
+            case .proxmox:
+                return .proxmox(proxmoxSelection)
+            case .jellyfin:
+                return .jellyfin(jellyfinSelection)
+            case .qbittorrent:
+                return .qbittorrent(qbSelection)
+            case .pihole:
+                return .pihole(piholeSelection)
+            }
         }
 
         private func bindingForJellyfin(_ m: JellyfinMetric) -> Binding<Bool> {
@@ -1189,6 +1557,13 @@ struct HomeView: View {
                         if !jellyfinSelection.contains(m) { jellyfinSelection.append(m) }
                     } else {
                         jellyfinSelection.removeAll { $0 == m }
+                    }
+                    // Validate size after metrics change
+                    if let config = selectedConfig {
+                        let currentMetrics = getCurrentMetrics()
+                        if !HomeLayout.validateWidgetSize(size, for: currentMetrics, serviceKind: config.kind, tolerance: false) {
+                            size = HomeLayout.minimumSizeForContent(currentMetrics, serviceKind: config.kind, strict: false)
+                        }
                     }
                 }
             )
@@ -1203,6 +1578,13 @@ struct HomeView: View {
                     } else {
                         qbSelection.removeAll { $0 == m }
                     }
+                    // Validate size after metrics change
+                    if let config = selectedConfig {
+                        let currentMetrics = getCurrentMetrics()
+                        if !HomeLayout.validateWidgetSize(size, for: currentMetrics, serviceKind: config.kind, tolerance: false) {
+                            size = HomeLayout.minimumSizeForContent(currentMetrics, serviceKind: config.kind, strict: false)
+                        }
+                    }
                 }
             )
         }
@@ -1215,6 +1597,13 @@ struct HomeView: View {
                         if !piholeSelection.contains(m) { piholeSelection.append(m) }
                     } else {
                         piholeSelection.removeAll { $0 == m }
+                    }
+                    // Validate size after metrics change
+                    if let config = selectedConfig {
+                        let currentMetrics = getCurrentMetrics()
+                        if !HomeLayout.validateWidgetSize(size, for: currentMetrics, serviceKind: config.kind, tolerance: false) {
+                            size = HomeLayout.minimumSizeForContent(currentMetrics, serviceKind: config.kind, strict: false)
+                        }
                     }
                 }
             )
@@ -1237,6 +1626,7 @@ struct HomeView: View {
             switch m {
             case .tvShowsCount: return "TV Shows"
             case .moviesCount: return "Movies"
+            case .userCount: return "Users"
             }
         }
         private func labelForQB(_ m: QBittorrentMetric) -> String {

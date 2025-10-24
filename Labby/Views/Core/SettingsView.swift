@@ -17,7 +17,6 @@ struct SettingsView: View {
     @State private var isConfirmingResetEverything = false
 
     var body: some View {
-        // TODO: Consider migrating to NavigationStack (iOS 16+) instead of NavigationView.
         NavigationView {
             Form {
                 Section {
@@ -100,7 +99,6 @@ struct SettingsView: View {
 
                 Section {
                     Button(role: .destructive) {
-                        // Reset settings action
                         appearanceManager.useSystemAppearance = true
                         appearanceManager.selectedAppearance = 0
                         showServiceStats = true

@@ -7,10 +7,7 @@
 
 import Foundation
 
-// Uses ServiceConfig.url(...) helper for safe URL composition across clients.
-
 /// Common interface all service clients implement.
-/// Note: Concrete clients should reuse a single URLSession and use ServiceConfig.url(...) for composing endpoints.
 protocol ServiceClient {
     var config: ServiceConfig { get }
     func testConnection() async throws -> String
@@ -18,7 +15,6 @@ protocol ServiceClient {
 }
 
 /// URLSessionDelegate that trusts the server when config.insecureSkipTLSVerify is enabled.
-/// Only used with .ephemeral sessions within clients.
 final class InsecureSessionDelegate: NSObject, URLSessionDelegate {
     func urlSession(
         _ session: URLSession, didReceive challenge: URLAuthenticationChallenge,

@@ -5,13 +5,11 @@ final class PiHoleClient: ServiceClient {
     private var sid: String?
     private var csrf: String?
     private var sidExpiry: Date?
-    // Persist session to avoid excessive session creation across app restarts
     private let sessionDefaults = UserDefaults.standard
     private let defaultsKeySID = "PiHoleClient.sid"
     private let defaultsKeyCSRF = "PiHoleClient.csrf"
     private let defaultsKeySidExpiry = "PiHoleClient.sidExpiry"
 
-    // Reuse a single URLSession per client (respecting insecure TLS option)
     private lazy var session: URLSession = {
         if config.insecureSkipTLSVerify {
             return URLSession(
@@ -28,8 +26,6 @@ final class PiHoleClient: ServiceClient {
         self.config = config
         self.loadSessionCache()
     }
-
-    // MARK: - ServiceClient
 
     func testConnection() async throws -> String {
         let session = self.session
@@ -56,7 +52,6 @@ final class PiHoleClient: ServiceClient {
                     PiHoleHTTPError.httpStatus(code: http.statusCode, body: body))
             }
 
-            // Parse version info (best-effort)
             var versionStr = "API reachable"
             if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 if let v = obj["version"] as? String {
@@ -81,7 +76,6 @@ final class PiHoleClient: ServiceClient {
         let session = self.session
         try await ensureAuthenticated(session: session)
 
-        // 1) Get blocking status from v6 endpoint
         var blockingStatus: String? = nil
         do {
             let blockingURL = try makeURL(path: "api/dns/blocking")
@@ -104,10 +98,8 @@ final class PiHoleClient: ServiceClient {
                 }
             }
         } catch {
-            // Ignore blocking status errors; we'll still try to fetch summary stats below.
         }
 
-        // 2) Try v6 summary endpoints (best-effort) before falling back to legacy
         let v6Candidates = [
             "api/stats/summary",
             "api/info/summary",
@@ -150,14 +142,12 @@ final class PiHoleClient: ServiceClient {
                         gravityLastUpdatedAbsolute: nil
                     )
 
-                    // Many v6 endpoints wrap data inside "data", with summary/stats nested
                     let payload: [String: Any] = {
                         let base = (obj["data"] as? [String: Any]) ?? obj
                         if let s = base["summary"] as? [String: Any] { return s }
                         if let s2 = base["statistics"] as? [String: Any] { return s2 }
                         return base
                     }()
-                    // Map v6 /api/stats/summary nested structure
                     if let q = payload["queries"] as? [String: Any] {
                         if let v = q["total"] {
                             if let i = v as? Int {
@@ -273,7 +263,6 @@ final class PiHoleClient: ServiceClient {
                         return 0
                     }
 
-                    // Populate using multiple possible key variants found in v6 docs/UI (fallback only if still zero)
                     if stats.dnsQueriesToday == 0 {
                         stats.dnsQueriesToday = intVal([
                             "dns_queries_today", "dns_queries", "queries", "total_queries",
@@ -323,7 +312,6 @@ final class PiHoleClient: ServiceClient {
                         }
                     }
 
-                    // Accept if metrics are non-zero, or if expected keys are present (even if zero)
                     if stats.dnsQueriesToday > 0
                         || stats.adsBlockedToday > 0
                         || stats.domainsBeingBlocked > 0
@@ -345,18 +333,15 @@ final class PiHoleClient: ServiceClient {
                             payload["queries"] != nil || payload["clients"] != nil
                             || payload["gravity"] != nil
                         if hasExpectedKeys || hasNestedStats {
-                            // parsed v6 stats
                             return .pihole(stats)
                         }
                     }
                 }
             } catch {
-                // Try next candidate
                 continue
             }
         }
 
-        // 3) Fallback to legacy /admin/api.php?summaryRaw (still works on many installs or downgraded v5)
         let legacyURL = try makeAPIURL(queryItems: try summaryRawQueryItems())
         var legacyReq = URLRequest(url: legacyURL)
         legacyReq.httpMethod = "GET"
@@ -392,7 +377,6 @@ final class PiHoleClient: ServiceClient {
             }
             var stats = PiHoleStats(raw: summary)
             if let s = blockingStatus { stats.status = s }
-            // parsed legacy stats
             return .pihole(stats)
         } catch let error as ServiceError {
             throw error

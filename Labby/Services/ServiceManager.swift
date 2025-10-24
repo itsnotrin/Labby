@@ -72,7 +72,6 @@ final class ServiceManager: ObservableObject {
     }
 
     func resetAllData() {
-        // Delete secrets for all configured services
         for config in services {
             switch config.auth {
             case .apiToken(let secretKeychainKey):
@@ -83,13 +82,9 @@ final class ServiceManager: ObservableObject {
                 KeychainStorage.shared.deleteSecret(forKey: tokenSecretKeychainKey)
             }
         }
-        // Clear in-memory services
         services.removeAll()
-        // Remove persisted storage
         UserDefaults.standard.removeObject(forKey: storageKey)
-        // Remove home layouts
         HomeLayoutStore.shared.removeAllHomes()
-        // Also clear homes data
         UserDefaults.standard.removeObject(forKey: "homes")
         UserDefaults.standard.removeObject(forKey: "selectedHome")
     }
