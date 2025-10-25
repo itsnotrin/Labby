@@ -95,7 +95,7 @@ Widgets are placed on a 2-column grid with multiple size options:
 #### For Developers
 1. Clone the repository:
    ```bash
-   git clone https://github.com/ryanwiecz/Labby.git
+   git clone https://github.com/itsnotrin/Labby.git
    cd Labby
    ```
 2. Open `Labby.xcodeproj` in Xcode
