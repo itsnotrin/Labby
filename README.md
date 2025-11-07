@@ -4,20 +4,7 @@
 
 Instead of juggling multiple web interfaces or mobile apps, Labby provides a single, native iOS experience for controlling your homelab infrastructure.
 
-## 💝 Support the Project
 
-If Labby helps manage your homelab, consider supporting its development:
-
-### Cryptocurrency
-- **Bitcoin (BTC)**: `bc1q2seahuhpr2psu0cj6gacvjelyt8da22saf82d9`
-- **Ethereum (ETH)**: `0x13FEb6D4608ab9cbe00A7D6b9a4684F752C1AD74`
-- **Litecoin (LTC)**: `Li7jBnBTKtSQd4BajPLhgnGG2hSEQb54SW`
-
-### Digital Payments
-- **Apple Pay / Google Pay**: [Click Here](https://monzo.me/ryanwieczorkiewicz)
-- **GitHub Sponsors**: [Click Here](https://github.com/sponsors/itsnotrin)
-
-Every contribution helps cover development costs and enables new features! 🙏
 
 ## ✨ Features
 
@@ -137,6 +124,21 @@ See our [Contributing Guide](docs/contributing.md) to get started.
 - **🔐 Secure Storage**: Credentials encrypted in iOS Keychain
 - **🚫 No Telemetry**: No usage data collection or external analytics
 - **📖 Open Source**: Full transparency with public source code
+
+## 💝 Support the Project
+
+If Labby helps manage your homelab, consider supporting its development:
+
+### Cryptocurrency
+- **Bitcoin (BTC)**: `bc1q2seahuhpr2psu0cj6gacvjelyt8da22saf82d9`
+- **Ethereum (ETH)**: `0x13FEb6D4608ab9cbe00A7D6b9a4684F752C1AD74`
+- **Litecoin (LTC)**: `Li7jBnBTKtSQd4BajPLhgnGG2hSEQb54SW`
+
+### Digital Payments
+- **Apple Pay / Google Pay**: [Click Here](https://monzo.me/ryanwieczorkiewicz)
+- **GitHub Sponsors**: [Click Here](https://github.com/sponsors/itsnotrin)
+
+Every contribution helps cover development costs and enables new features! 🙏
 
 ## 📄 License
 
