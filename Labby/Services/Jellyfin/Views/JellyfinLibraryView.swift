@@ -130,7 +130,7 @@ struct JellyfinItemRowView: View {
                         .clipShape(Capsule())
 
                     if let year = item.productionYear {
-                        Text("\(year)")
+                        Text(String(year))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -215,17 +215,17 @@ class JellyfinLibraryViewModel: ObservableObject {
         let items: [JellyfinItem]
         let timestamp: Date
     }
-    
+
     // In-memory cache keyed by library id for the app session.
     private static var cache: [String: CacheEntry] = [:]
-    
+
     // Cache TTL in seconds (5 minutes)
     private static let cacheTTL: TimeInterval = 5 * 60
-    
+
     @Published var items: [JellyfinItem] = []
     @Published var isLoading = false
     @Published var error: String?
-    
+
     func loadItems(config: ServiceConfig, libraryId: String) async {
         // Check cache first and respect TTL
         if let entry = Self.cache[libraryId] {
@@ -242,10 +242,10 @@ class JellyfinLibraryViewModel: ObservableObject {
                 print("[JellyfinLibraryViewModel] Cache expired for library: \(libraryId) (age: \(Int(age))s). Refreshing.")
             }
         }
-        
+
         isLoading = true
         error = nil
-        
+
         do {
             let client = JellyfinClient(config: config)
             let fetched = try await client.fetchLibraryItems(libraryId: libraryId)
@@ -255,10 +255,10 @@ class JellyfinLibraryViewModel: ObservableObject {
         } catch {
             self.error = error.localizedDescription
         }
-        
+
         isLoading = false
     }
-    
+
     // Force-refresh helper: clears cache and reloads
     func refresh(config: ServiceConfig, libraryId: String) async {
         Self.cache[libraryId] = nil

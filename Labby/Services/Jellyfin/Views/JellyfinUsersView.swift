@@ -521,7 +521,7 @@ struct JellyfinItemDetailView: View {
                             .clipShape(Capsule())
 
                         if let year = item.productionYear {
-                            Text("\(year)")
+                            Text(String(year))
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }

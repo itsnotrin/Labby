@@ -18,8 +18,13 @@ struct JellyfinView: View {
             if viewModel.isLoading {
                 VStack(spacing: 16) {
                     ProgressView()
-                    Text("Loading Jellyfin libraries...")
-                        .foregroundStyle(.secondary)
+                    if viewModel.isLoadingCounts {
+                        Text("Fetching library item counts...")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Loading Jellyfin libraries...")
+                            .foregroundStyle(.secondary)
+                    }
                 }
             } else if let error = viewModel.error {
                 VStack(spacing: 16) {
@@ -94,7 +99,15 @@ struct LibraryRowView: View {
             VStack(alignment: .leading) {
                 Text(library.name)
                     .font(.headline)
-                if let itemCount = library.itemCount {
+                if let accurateCount = library.accurateItemCount {
+                    Text("\(accurateCount) items")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if let recursiveCount = library.recursiveItemCount {
+                    Text("\(recursiveCount) items")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if let itemCount = library.itemCount {
                     Text("\(itemCount) items")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -148,12 +161,45 @@ struct JellyfinLibrary: Identifiable, Codable {
     let name: String
     let collectionType: String?
     let itemCount: Int?
+    let recursiveItemCount: Int?
+    let accurateItemCount: Int?
 
     enum CodingKeys: String, CodingKey {
         case id = "Id"
         case name = "Name"
         case collectionType = "CollectionType"
         case itemCount = "ChildCount"
+        case recursiveItemCount = "RecursiveItemCount"
+        // accurateItemCount is not from API, it's computed locally
+    }
+
+    init(id: String, name: String, collectionType: String?, itemCount: Int?, recursiveItemCount: Int?, accurateItemCount: Int? = nil) {
+        self.id = id
+        self.name = name
+        self.collectionType = collectionType
+        self.itemCount = itemCount
+        self.recursiveItemCount = recursiveItemCount
+        self.accurateItemCount = accurateItemCount
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        collectionType = try container.decodeIfPresent(String.self, forKey: .collectionType)
+        itemCount = try container.decodeIfPresent(Int.self, forKey: .itemCount)
+        recursiveItemCount = try container.decodeIfPresent(Int.self, forKey: .recursiveItemCount)
+        accurateItemCount = nil // This will be set later
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encodeIfPresent(collectionType, forKey: .collectionType)
+        try container.encodeIfPresent(itemCount, forKey: .itemCount)
+        try container.encodeIfPresent(recursiveItemCount, forKey: .recursiveItemCount)
+        // Don't encode accurateItemCount as it's not part of the API
     }
 }
 
@@ -515,6 +561,7 @@ struct JellyfinUserPolicy: Codable {
 class JellyfinViewModel: ObservableObject {
     @Published var libraries: [JellyfinLibrary] = []
     @Published var isLoading = false
+    @Published var isLoadingCounts = false
     @Published var error: String?
 
     func loadLibraries(config: ServiceConfig) async {
@@ -530,8 +577,47 @@ class JellyfinViewModel: ObservableObject {
         do {
             let client = JellyfinClient(config: config)
             print("[JellyfinView] Loading libraries from: \(config.baseURLString)")
-            libraries = try await client.fetchLibraries()
-            print("[JellyfinView] Successfully loaded \(libraries.count) libraries")
+            var fetchedLibraries = try await client.fetchLibraries()
+            print("[JellyfinView] Successfully loaded \(fetchedLibraries.count) libraries")
+
+            // Show that we're now fetching counts
+            isLoadingCounts = true
+
+            // Fetch accurate item counts for each library concurrently
+            print("[JellyfinView] Fetching accurate item counts for libraries...")
+            await withTaskGroup(of: (Int, Int?).self) { group in
+                // Add tasks for each library
+                for (index, library) in fetchedLibraries.enumerated() {
+                    group.addTask {
+                        do {
+                            let count = try await client.fetchLibraryItemCount(libraryId: library.id)
+                            print("[JellyfinView] Library '\(library.name)': accurate count = \(count)")
+                            return (index, count)
+                        } catch {
+                            print("[JellyfinView] Failed to fetch count for library '\(library.name)': \(error)")
+                            return (index, nil)
+                        }
+                    }
+                }
+
+                // Collect results and update libraries
+                for await (index, count) in group {
+                    if let accurateCount = count {
+                        fetchedLibraries[index] = JellyfinLibrary(
+                            id: fetchedLibraries[index].id,
+                            name: fetchedLibraries[index].name,
+                            collectionType: fetchedLibraries[index].collectionType,
+                            itemCount: fetchedLibraries[index].itemCount,
+                            recursiveItemCount: nil,
+                            accurateItemCount: accurateCount
+                        )
+                    }
+                    // If count is nil, keep the library as-is without accurate count
+                }
+            }
+
+            libraries = fetchedLibraries
+            isLoadingCounts = false
         } catch {
             print("[JellyfinView] Error loading libraries: \(error)")
             if let serviceError = error as? ServiceError {
@@ -556,5 +642,6 @@ class JellyfinViewModel: ObservableObject {
         }
 
         isLoading = false
+        isLoadingCounts = false
     }
 }

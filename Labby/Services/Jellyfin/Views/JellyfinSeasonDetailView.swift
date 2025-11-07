@@ -89,7 +89,7 @@ struct JellyfinSeasonDetailView: View {
                                 }
 
                                 if let year = season.productionYear {
-                                    Text("• \(year)")
+                                    Text("• \(String(year))")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }

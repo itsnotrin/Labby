@@ -35,7 +35,7 @@ struct JellyfinSeriesDetailView: View {
 
                     HStack {
                         if let year = series.productionYear {
-                            Text("\(year)")
+                            Text(String(year))
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
@@ -302,7 +302,7 @@ struct SeasonRowView: View {
                     }
 
                     if let year = season.productionYear {
-                        Text("• \(year)")
+                        Text("• \(String(year))")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

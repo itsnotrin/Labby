@@ -319,7 +319,94 @@ final class JellyfinClient: ServiceClient {
         return decoded.Items
     }
 
+    func fetchLibraryItemCount(libraryId: String) async throws -> Int {
+        let authToken = try await authenticate()
+        let userId = try await getCurrentUserId(authToken: authToken)
 
+        // Use the same endpoint as fetchLibraryItems but only get the count
+        let url = try config.url(appending: "/Users/\(userId)/Items", queryItems: [
+            URLQueryItem(name: "ParentId", value: libraryId),
+            URLQueryItem(name: "IncludeItemTypes", value: "Movie,Series"),
+            URLQueryItem(name: "Recursive", value: "false"),
+            URLQueryItem(name: "Limit", value: "0"), // Limit=0 returns only count metadata
+            URLQueryItem(name: "Fields", value: "")  // Don't need any fields
+        ])
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(authToken, forHTTPHeaderField: "X-Emby-Token")
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else { throw ServiceError.unknown }
+
+            if http.statusCode == 401 {
+                print("[JellyfinClient] 401 in fetchLibraryItemCount, clearing cached token and retrying")
+                cachedAuthToken = nil
+                authTokenTimestamp = nil
+                let freshToken = try await authenticate()
+                return try await fetchLibraryItemCountWithToken(freshToken, userId: userId, libraryId: libraryId)
+            }
+
+            guard 200..<300 ~= http.statusCode else {
+                throw ServiceError.httpStatus(http.statusCode)
+            }
+
+            struct CountResponse: Codable {
+                let Items: [JellyfinItem]
+                let TotalRecordCount: Int?
+            }
+            let decoded = try JSONDecoder().decode(CountResponse.self, from: data)
+
+            // Use TotalRecordCount if available, otherwise fall back to 0
+            if let totalCount = decoded.TotalRecordCount {
+                return totalCount
+            } else {
+                // With Limit=0, Items should be empty but TotalRecordCount should be accurate
+                print("[JellyfinClient] Warning: TotalRecordCount not available for library \(libraryId)")
+                return 0
+            }
+        } catch let error as ServiceError {
+            throw error
+        } catch {
+            throw ServiceError.network(error)
+        }
+    }
+
+    private func fetchLibraryItemCountWithToken(_ authToken: String, userId: String, libraryId: String) async throws -> Int {
+        let url = try config.url(appending: "/Users/\(userId)/Items", queryItems: [
+            URLQueryItem(name: "ParentId", value: libraryId),
+            URLQueryItem(name: "IncludeItemTypes", value: "Movie,Series"),
+            URLQueryItem(name: "Recursive", value: "false"),
+            URLQueryItem(name: "Limit", value: "0"),
+            URLQueryItem(name: "Fields", value: "")
+        ])
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(authToken, forHTTPHeaderField: "X-Emby-Token")
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else { throw ServiceError.unknown }
+        guard 200..<300 ~= http.statusCode else {
+            throw ServiceError.httpStatus(http.statusCode)
+        }
+
+        struct CountResponse: Codable {
+            let Items: [JellyfinItem]
+            let TotalRecordCount: Int?
+        }
+        let decoded = try JSONDecoder().decode(CountResponse.self, from: data)
+
+        if let totalCount = decoded.TotalRecordCount {
+            return totalCount
+        } else {
+            // With Limit=0, Items should be empty but TotalRecordCount should be accurate
+            print("[JellyfinClient] Warning: TotalRecordCount not available for library \(libraryId)")
+            return 0
+        }
+    }
 
     func fetchLibraryItems(libraryId: String) async throws -> [JellyfinItem] {
         let authToken = try await authenticate()

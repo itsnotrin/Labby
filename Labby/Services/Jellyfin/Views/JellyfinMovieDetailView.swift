@@ -24,7 +24,7 @@ struct JellyfinMovieDetailView: View {
 
                     HStack {
                         if let year = item.productionYear {
-                            Text("\(year)")
+                            Text(String(year))
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
