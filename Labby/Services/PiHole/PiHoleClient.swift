@@ -572,6 +572,324 @@ final class PiHoleClient: ServiceClient {
         sessionDefaults.removeObject(forKey: defaultsKeyCSRF)
         sessionDefaults.removeObject(forKey: defaultsKeySidExpiry)
     }
+
+    // MARK: - Extended API Methods for Detailed View
+
+    func toggleBlocking(enable: Bool) async throws {
+        let session = self.session
+        try await ensureAuthenticated(session: session)
+
+        let endpoint = enable ? "api/dns/blocking" : "api/dns/blocking"
+        let url = try makeURL(path: endpoint)
+
+        var request = URLRequest(url: url)
+        request.httpMethod = enable ? "POST" : "DELETE"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        if let sid = sid {
+            request.setValue(sid, forHTTPHeaderField: "X-FTL-SID")
+            request.setValue("sid=\(sid)", forHTTPHeaderField: "Cookie")
+            if let csrf = csrf {
+                request.setValue(csrf, forHTTPHeaderField: "X-FTL-CSRF")
+            }
+        }
+
+        let (_, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw ServiceError.network(PiHoleHTTPError.httpStatus(code: (response as? HTTPURLResponse)?.statusCode ?? 0, body: "Failed to toggle blocking"))
+        }
+    }
+
+    func fetchBlockingStatus() async throws -> Bool {
+        let session = self.session
+        try await ensureAuthenticated(session: session)
+
+        let url = try makeURL(path: "api/dns/blocking")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        if let sid = sid {
+            request.setValue(sid, forHTTPHeaderField: "X-FTL-SID")
+            request.setValue("sid=\(sid)", forHTTPHeaderField: "Cookie")
+            if let csrf = csrf {
+                request.setValue(csrf, forHTTPHeaderField: "X-FTL-CSRF")
+            }
+        }
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw ServiceError.network(PiHoleHTTPError.httpStatus(code: (response as? HTTPURLResponse)?.statusCode ?? 0, body: "Failed to fetch blocking status"))
+        }
+
+        if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let blocking = obj["blocking"] as? Bool {
+            return blocking
+        }
+
+        return true // Default to enabled if we can't determine status
+    }
+
+    func fetchTopClients(limit: Int = 10) async throws -> [(String, Int)] {
+        let session = self.session
+        try await ensureAuthenticated(session: session)
+
+        let url = try makeURL(path: "api/stats/top_clients")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        if let sid = sid {
+            request.setValue(sid, forHTTPHeaderField: "X-FTL-SID")
+            request.setValue("sid=\(sid)", forHTTPHeaderField: "Cookie")
+            if let csrf = csrf {
+                request.setValue(csrf, forHTTPHeaderField: "X-FTL-CSRF")
+            }
+        }
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            return [] // Return empty array if request fails
+        }
+
+        if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let clientsData = obj["top_clients"] as? [String: Int] {
+            return Array(clientsData.sorted { $0.value > $1.value }.prefix(limit))
+        }
+
+        return []
+    }
+
+    func fetchTopBlockedDomains(limit: Int = 10) async throws -> [(String, Int)] {
+        let session = self.session
+        try await ensureAuthenticated(session: session)
+
+        let url = try makeURL(path: "api/stats/top_blocked")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        if let sid = sid {
+            request.setValue(sid, forHTTPHeaderField: "X-FTL-SID")
+            request.setValue("sid=\(sid)", forHTTPHeaderField: "Cookie")
+            if let csrf = csrf {
+                request.setValue(csrf, forHTTPHeaderField: "X-FTL-CSRF")
+            }
+        }
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            return [] // Return empty array if request fails
+        }
+
+        if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let blockedData = obj["top_blocked"] as? [String: Int] {
+            return Array(blockedData.sorted { $0.value > $1.value }.prefix(limit))
+        }
+
+        return []
+    }
+
+    func fetchQueryLog(limit: Int = 100) async throws -> [PiHoleQueryLogEntry] {
+        let session = self.session
+        try await ensureAuthenticated(session: session)
+
+        let url = try makeURL(path: "api/stats/query_log")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        if let sid = sid {
+            request.setValue(sid, forHTTPHeaderField: "X-FTL-SID")
+            request.setValue("sid=\(sid)", forHTTPHeaderField: "Cookie")
+            if let csrf = csrf {
+                request.setValue(csrf, forHTTPHeaderField: "X-FTL-CSRF")
+            }
+        }
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            return [] // Return empty array if request fails
+        }
+
+        if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let logsArray = obj["data"] as? [[Any]] {
+            return logsArray.prefix(limit).compactMap { logEntry in
+                guard logEntry.count >= 6,
+                      let timestamp = logEntry[0] as? Double,
+                      let queryType = logEntry[1] as? String,
+                      let domain = logEntry[2] as? String,
+                      let client = logEntry[3] as? String,
+                      let status = logEntry[4] as? Int else {
+                    return nil
+                }
+
+                let replyType = logEntry.count > 5 ? logEntry[5] as? String : nil
+                let responseTime = logEntry.count > 6 ? logEntry[6] as? Double : nil
+
+                return PiHoleQueryLogEntry(
+                    timestamp: timestamp,
+                    queryType: queryType,
+                    domain: domain,
+                    client: client,
+                    status: status,
+                    replyType: replyType,
+                    responseTime: responseTime
+                )
+            }
+        }
+
+        return []
+    }
+
+    func flushLogs() async throws {
+        let session = self.session
+        try await ensureAuthenticated(session: session)
+
+        let url = try makeURL(path: "api/stats/flush_logs")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        if let sid = sid {
+            request.setValue(sid, forHTTPHeaderField: "X-FTL-SID")
+            request.setValue("sid=\(sid)", forHTTPHeaderField: "Cookie")
+            if let csrf = csrf {
+                request.setValue(csrf, forHTTPHeaderField: "X-FTL-CSRF")
+            }
+        }
+
+        let (_, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw ServiceError.network(PiHoleHTTPError.httpStatus(code: (response as? HTTPURLResponse)?.statusCode ?? 0, body: "Failed to flush logs"))
+        }
+    }
+
+    func fetchQueryTypes() async throws -> [String: Int] {
+        let session = self.session
+        try await ensureAuthenticated(session: session)
+
+        let url = try makeURL(path: "api/stats/query_types_over_time")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        if let sid = sid {
+            request.setValue(sid, forHTTPHeaderField: "X-FTL-SID")
+            request.setValue("sid=\(sid)", forHTTPHeaderField: "Cookie")
+            if let csrf = csrf {
+                request.setValue(csrf, forHTTPHeaderField: "X-FTL-CSRF")
+            }
+        }
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            return [:] // Return empty dict if request fails
+        }
+
+        if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let queryTypesData = obj["query_types"] as? [String: Int] {
+            return queryTypesData
+        }
+
+        return [:]
+    }
+
+    func enableBlocking() async throws {
+        try await toggleBlocking(enable: true)
+    }
+
+    func disableBlocking() async throws {
+        try await toggleBlocking(enable: false)
+    }
+
+    func fetchNetworkScan() async throws -> [String] {
+        let session = self.session
+        try await ensureAuthenticated(session: session)
+
+        let url = try makeURL(path: "api/network")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        if let sid = sid {
+            request.setValue(sid, forHTTPHeaderField: "X-FTL-SID")
+            request.setValue("sid=\(sid)", forHTTPHeaderField: "Cookie")
+            if let csrf = csrf {
+                request.setValue(csrf, forHTTPHeaderField: "X-FTL-CSRF")
+            }
+        }
+
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            return [] // Return empty array if request fails
+        }
+
+        if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let networkData = obj["network"] as? [String] {
+            return networkData
+        }
+
+        return []
+    }
+}
+
+// MARK: - Additional Data Models
+
+struct PiHoleQueryLogEntry: Codable, Identifiable, Equatable {
+    let id = UUID()
+    let timestamp: Double
+    let queryType: String
+    let domain: String
+    let client: String
+    let status: Int
+    let replyType: String?
+    let responseTime: Double?
+
+    var formattedTime: String {
+        let date = Date(timeIntervalSince1970: timestamp)
+        let formatter = DateFormatter()
+        formatter.timeStyle = .medium
+        return formatter.string(from: date)
+    }
+
+    var isBlocked: Bool {
+        // Pi-hole status codes: 1=blocked by gravity, 4=blocked by blacklist, etc.
+        return status == 1 || status == 4 || status == 5 || status == 6 || status == 7 || status == 8 || status == 9 || status == 10 || status == 11
+    }
+
+    var statusDescription: String {
+        switch status {
+        case 0: return "Unknown"
+        case 1: return "Blocked (gravity)"
+        case 2: return "Forwarded"
+        case 3: return "Cached"
+        case 4: return "Blocked (regex)"
+        case 5: return "Blocked (blacklist)"
+        case 6: return "Blocked (external)"
+        case 7: return "Blocked (gravity/CNAME)"
+        case 8: return "Blocked (regex/CNAME)"
+        case 9: return "Blocked (blacklist/CNAME)"
+        case 10: return "Blocked (external/CNAME)"
+        case 11: return "Blocked (gravity/NODATA)"
+        case 12: return "Blocked (regex/NODATA)"
+        case 13: return "Blocked (blacklist/NODATA)"
+        case 14: return "Blocked (external/NODATA)"
+        default: return "Status \(status)"
+        }
+    }
+
+    var statusColor: String {
+        switch status {
+        case 0: return "gray"
+        case 1, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14: return "red"
+        case 2: return "blue"
+        case 3: return "green"
+        default: return "gray"
+        }
+    }
 }
 
 // MARK: - Models

@@ -707,6 +707,22 @@ struct HomeView: View {
                                             )
                                         }
                                         .gridCellColumns(w.size.columnSpan)
+                                    } else if cfg.kind == .pihole {
+                                        NavigationLink {
+                                            PiHoleView(config: cfg)
+                                        } label: {
+                                            HomeWidgetCard(
+                                                widget: w,
+                                                config: cfg,
+                                                stats: stats[w.serviceId],
+                                                isEditing: isEditingLayout,
+                                                onEdit: { onEditWidget(w) },
+                                                onStats: { payload in onStats(w.serviceId, payload) },
+                                                showServiceStats: showServiceStats,
+                                                shouldSelfFetch: shouldSelfFetch
+                                            )
+                                        }
+                                        .gridCellColumns(w.size.columnSpan)
                                     } else {
                                         HomeWidgetCard(
                                             widget: w,
@@ -748,6 +764,21 @@ struct HomeView: View {
                                         if cfg.kind == .qbittorrent {
                                             NavigationLink {
                                                 QBittorrentView(config: cfg)
+                                            } label: {
+                                                HomeWidgetCard(
+                                                    widget: w,
+                                                    config: cfg,
+                                                    stats: stats[w.serviceId],
+                                                    isEditing: isEditingLayout,
+                                                    onEdit: { onEditWidget(w) },
+                                                    onStats: { payload in onStats(w.serviceId, payload) },
+                                                    showServiceStats: showServiceStats,
+                                                    shouldSelfFetch: shouldSelfFetch
+                                                )
+                                            }
+                                        } else if cfg.kind == .pihole {
+                                            NavigationLink {
+                                                PiHoleView(config: cfg)
                                             } label: {
                                                 HomeWidgetCard(
                                                     widget: w,

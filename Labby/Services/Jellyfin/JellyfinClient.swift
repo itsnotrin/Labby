@@ -758,7 +758,7 @@ final class JellyfinClient: ServiceClient {
         // Use the Items endpoint to fetch seasons belonging to the given series.
         // This avoids inconsistent behavior from specialized endpoints that may return episodes or mislabel items.
         let authToken = try await authenticate()
-        let userId = try await getCurrentUserId(authToken: authToken)
+        _ = try await getCurrentUserId(authToken: authToken)
 
         // Query Items with the SeriesId filter and request only Season item types, non-recursive.
         let url = try config.url(appending: "/Items", queryItems: [
