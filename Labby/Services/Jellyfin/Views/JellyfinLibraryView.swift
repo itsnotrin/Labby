@@ -129,12 +129,6 @@ struct JellyfinItemRowView: View {
                         .foregroundStyle(.blue)
                         .clipShape(Capsule())
 
-                    if let year = item.productionYear {
-                        Text(String(year))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
                     if let rating = item.officialRating {
                         Text(rating)
                             .font(.caption)
@@ -143,6 +137,12 @@ struct JellyfinItemRowView: View {
                             .background(Color.orange.opacity(0.2))
                             .foregroundStyle(.orange)
                             .clipShape(RoundedRectangle(cornerRadius: 3))
+                    }
+
+                    if let year = item.productionYear {
+                        Text(String(year))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
 
                     Spacer()

@@ -34,12 +34,6 @@ struct JellyfinSeriesDetailView: View {
                         .fontWeight(.bold)
 
                     HStack {
-                        if let year = series.productionYear {
-                            Text(String(year))
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-
                         if let rating = series.officialRating {
                             Text(rating)
                                 .font(.caption)
@@ -48,6 +42,12 @@ struct JellyfinSeriesDetailView: View {
                                 .background(Color.orange.opacity(0.2))
                                 .foregroundStyle(.orange)
                                 .clipShape(RoundedRectangle(cornerRadius: 6))
+                        }
+
+                        if let year = series.productionYear {
+                            Text(String(year))
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
                         }
 
                         if let communityRating = series.communityRating {
