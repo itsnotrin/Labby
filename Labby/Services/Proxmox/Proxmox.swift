@@ -1147,14 +1147,18 @@ struct ProxmoxDetailView: View {
                 Image(systemName: icon)
                     .font(.title2)
                     .foregroundColor(color)
+                    .frame(width: 24)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(.subheadline)
                         .fontWeight(.medium)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                     Text(subtitle)
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        .lineLimit(1)
                 }
 
                 Spacer()
@@ -1164,7 +1168,7 @@ struct ProxmoxDetailView: View {
                     .foregroundColor(.secondary)
             }
             .padding()
-            .frame(minHeight: 60)
+            .frame(minHeight: 70, maxHeight: 70)
             .background(Color(UIColor.systemBackground))
             .cornerRadius(10)
             .shadow(radius: 1)
