@@ -158,6 +158,8 @@ struct ProxmoxStats: Codable, Equatable {
     public var totalVMs: Int
     public var runningCount: Int
     public var stoppedCount: Int
+    public var runningVMs: Int
+    public var runningCTs: Int
     public var netUpBps: Double
     public var netDownBps: Double
 
@@ -165,12 +167,14 @@ struct ProxmoxStats: Codable, Equatable {
         cpuUsagePercent: Double,
         memoryUsedBytes: Int64,
         memoryTotalBytes: Int64,
-        totalCTs: Int = 0,
-        totalVMs: Int = 0,
-        runningCount: Int = 0,
-        stoppedCount: Int = 0,
-        netUpBps: Double = 0,
-        netDownBps: Double = 0
+        totalCTs: Int,
+        totalVMs: Int,
+        runningCount: Int,
+        stoppedCount: Int,
+        runningVMs: Int,
+        runningCTs: Int,
+        netUpBps: Double,
+        netDownBps: Double
     ) {
         self.cpuUsagePercent = cpuUsagePercent
         self.memoryUsedBytes = memoryUsedBytes
@@ -179,26 +183,63 @@ struct ProxmoxStats: Codable, Equatable {
         self.totalVMs = totalVMs
         self.runningCount = runningCount
         self.stoppedCount = stoppedCount
+        self.runningVMs = runningVMs
+        self.runningCTs = runningCTs
         self.netUpBps = netUpBps
         self.netDownBps = netDownBps
     }
 
     private enum CodingKeys: String, CodingKey {
         case cpuUsagePercent, memoryUsedBytes, memoryTotalBytes, totalCTs, totalVMs, runningCount,
-            stoppedCount, netUpBps, netDownBps
+            stoppedCount, runningVMs, runningCTs, netUpBps, netDownBps
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        self.cpuUsagePercent = try c.decodeIfPresent(Double.self, forKey: .cpuUsagePercent) ?? 0
+
+        // Handle potential NaN/infinite values for doubles
+        if let cpuValue = try c.decodeIfPresent(Double.self, forKey: .cpuUsagePercent) {
+            self.cpuUsagePercent = cpuValue.isFinite ? cpuValue : 0
+        } else {
+            self.cpuUsagePercent = 0
+        }
+
+        if let netUpValue = try c.decodeIfPresent(Double.self, forKey: .netUpBps) {
+            self.netUpBps = netUpValue.isFinite ? netUpValue : 0
+        } else {
+            self.netUpBps = 0
+        }
+
+        if let netDownValue = try c.decodeIfPresent(Double.self, forKey: .netDownBps) {
+            self.netDownBps = netDownValue.isFinite ? netDownValue : 0
+        } else {
+            self.netDownBps = 0
+        }
+
         self.memoryUsedBytes = try c.decodeIfPresent(Int64.self, forKey: .memoryUsedBytes) ?? 0
         self.memoryTotalBytes = try c.decodeIfPresent(Int64.self, forKey: .memoryTotalBytes) ?? 0
         self.totalCTs = try c.decodeIfPresent(Int.self, forKey: .totalCTs) ?? 0
         self.totalVMs = try c.decodeIfPresent(Int.self, forKey: .totalVMs) ?? 0
         self.runningCount = try c.decodeIfPresent(Int.self, forKey: .runningCount) ?? 0
         self.stoppedCount = try c.decodeIfPresent(Int.self, forKey: .stoppedCount) ?? 0
-        self.netUpBps = try c.decodeIfPresent(Double.self, forKey: .netUpBps) ?? 0
-        self.netDownBps = try c.decodeIfPresent(Double.self, forKey: .netDownBps) ?? 0
+        self.runningVMs = try c.decodeIfPresent(Int.self, forKey: .runningVMs) ?? 0
+        self.runningCTs = try c.decodeIfPresent(Int.self, forKey: .runningCTs) ?? 0
+    }
+
+    static func empty() -> ProxmoxStats {
+        return ProxmoxStats(
+            cpuUsagePercent: 0,
+            memoryUsedBytes: 0,
+            memoryTotalBytes: 0,
+            totalCTs: 0,
+            totalVMs: 0,
+            runningCount: 0,
+            stoppedCount: 0,
+            runningVMs: 0,
+            runningCTs: 0,
+            netUpBps: 0,
+            netDownBps: 0
+        )
     }
 }
 

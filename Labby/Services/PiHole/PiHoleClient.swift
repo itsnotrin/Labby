@@ -729,6 +729,7 @@ final class PiHoleClient: ServiceClient {
                 let responseTime = logEntry.count > 6 ? logEntry[6] as? Double : nil
 
                 return PiHoleQueryLogEntry(
+                    id: UUID(),
                     timestamp: timestamp,
                     queryType: queryType,
                     domain: domain,
@@ -839,7 +840,7 @@ final class PiHoleClient: ServiceClient {
 // MARK: - Additional Data Models
 
 struct PiHoleQueryLogEntry: Codable, Identifiable, Equatable {
-    let id = UUID()
+    let id: UUID
     let timestamp: Double
     let queryType: String
     let domain: String

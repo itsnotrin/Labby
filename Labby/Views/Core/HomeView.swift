@@ -331,6 +331,23 @@ struct HomeView: View {
         @State private var isLoadingStats = false
 
         var body: some View {
+            Group {
+                if isEditing {
+                    widgetContent
+                        .onTapGesture {
+                            onEdit()
+                        }
+                } else {
+                    NavigationLink(destination: destinationView(for: config)) {
+                        widgetContent
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+
+        @ViewBuilder
+        private var widgetContent: some View {
             let height: CGFloat = {
                 switch widget.size {
                 case .small: return 120
@@ -425,9 +442,6 @@ struct HomeView: View {
                         .foregroundStyle(.orange)
                         .padding(8)
                 }
-            }
-            .onTapGesture {
-                if isEditing { onEdit() }
             }
             .task {
                 guard shouldSelfFetch && showServiceStats else { return }
@@ -554,6 +568,20 @@ struct HomeView: View {
 
             default:
                 return []
+            }
+        }
+
+        @ViewBuilder
+        private func destinationView(for config: ServiceConfig) -> some View {
+            switch config.kind {
+            case .proxmox:
+                ProxmoxView(config: config)
+            case .jellyfin:
+                JellyfinView(config: config)
+            case .qbittorrent:
+                QBittorrentView(config: config)
+            case .pihole:
+                PiHoleView(config: config)
             }
         }
     }
@@ -723,6 +751,22 @@ struct HomeView: View {
                                             )
                                         }
                                         .gridCellColumns(w.size.columnSpan)
+                                    } else if cfg.kind == .proxmox {
+                                        NavigationLink {
+                                            ProxmoxView(config: cfg)
+                                        } label: {
+                                            HomeWidgetCard(
+                                                widget: w,
+                                                config: cfg,
+                                                stats: stats[w.serviceId],
+                                                isEditing: isEditingLayout,
+                                                onEdit: { onEditWidget(w) },
+                                                onStats: { payload in onStats(w.serviceId, payload) },
+                                                showServiceStats: showServiceStats,
+                                                shouldSelfFetch: shouldSelfFetch
+                                            )
+                                        }
+                                        .gridCellColumns(w.size.columnSpan)
                                     } else {
                                         HomeWidgetCard(
                                             widget: w,
@@ -779,6 +823,21 @@ struct HomeView: View {
                                         } else if cfg.kind == .pihole {
                                             NavigationLink {
                                                 PiHoleView(config: cfg)
+                                            } label: {
+                                                HomeWidgetCard(
+                                                    widget: w,
+                                                    config: cfg,
+                                                    stats: stats[w.serviceId],
+                                                    isEditing: isEditingLayout,
+                                                    onEdit: { onEditWidget(w) },
+                                                    onStats: { payload in onStats(w.serviceId, payload) },
+                                                    showServiceStats: showServiceStats,
+                                                    shouldSelfFetch: shouldSelfFetch
+                                                )
+                                            }
+                                        } else if cfg.kind == .proxmox {
+                                            NavigationLink {
+                                                ProxmoxView(config: cfg)
                                             } label: {
                                                 HomeWidgetCard(
                                                     widget: w,

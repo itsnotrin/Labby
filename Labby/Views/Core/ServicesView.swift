@@ -86,6 +86,19 @@ struct ServicesView: View {
                                         // No-op in NavigationLink label
                                     }
                                 }
+                            } else if config.kind == .proxmox {
+                                NavigationLink {
+                                    ProxmoxView(config: config)
+                                } label: {
+                                    ServiceRowView(
+                                        config: config,
+                                        isTesting: testingServiceId == config.id,
+                                        asButton: false,
+                                        showChevron: false
+                                    ) {
+                                        // No-op in NavigationLink label
+                                    }
+                                }
                             } else {
                                 ServiceRowView(config: config, isTesting: testingServiceId == config.id) {
                                     Task {

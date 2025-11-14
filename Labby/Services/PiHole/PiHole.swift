@@ -168,8 +168,7 @@ struct PiHoleView: View {
     }
 
     var body: some View {
-        NavigationView {
-            ScrollView {
+        ScrollView {
                 VStack(spacing: 16) {
                     if let error = vm.error {
                         ErrorCard(message: error)
@@ -198,7 +197,7 @@ struct PiHoleView: View {
                             NavigationLink {
                                 PiHoleDetailView(config: config)
                             } label: {
-                                DetailedViewCard()
+                                DetailedDashboardCard(subtitle: "View logs, top domains, and advanced controls")
                             }
                             .buttonStyle(PlainButtonStyle())
                         }
@@ -219,7 +218,6 @@ struct PiHoleView: View {
             }
             .onAppear { vm.startAutoRefresh() }
             .onDisappear { vm.stopAutoRefresh() }
-        }
     }
 }
 
@@ -302,54 +300,9 @@ struct QuickStatsGrid: View {
     }
 }
 
-struct StatCard: View {
-    let title: String
-    let value: String
-    let icon: String
-    let color: Color
 
-    var body: some View {
-        HStack {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundColor(color)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(value)
-                    .font(.title3)
-                    .fontWeight(.bold)
-                Text(title)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            Spacer()
-        }
-        .padding()
-        .background(Color(UIColor.systemBackground))
-        .cornerRadius(10)
-        .shadow(radius: 1)
-    }
-}
 
-struct DetailedViewCard: View {
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Detailed Dashboard")
-                    .font(.headline)
-                Text("View logs, top domains, and advanced controls")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            Spacer()
-            Image(systemName: "chevron.right")
-                .foregroundColor(.secondary)
-        }
-        .padding()
-        .background(Color(UIColor.systemGray6))
-        .cornerRadius(12)
-    }
-}
 
 struct NetworkHealthCard: View {
     let stats: PiHoleStats
@@ -478,22 +431,7 @@ struct RecentActivityCard: View {
     }
 }
 
-struct ErrorCard: View {
-    let message: String
 
-    var body: some View {
-        HStack {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundColor(.red)
-            Text(message)
-                .foregroundColor(.red)
-            Spacer()
-        }
-        .padding()
-        .background(Color.red.opacity(0.1))
-        .cornerRadius(8)
-    }
-}
 
 // MARK: - Detailed View
 
@@ -1203,86 +1141,10 @@ struct StatusOverviewSection: View {
     }
 }
 
-struct MetricCard: View {
-    let title: String
-    let value: String
-    let subtitle: String
-    let color: Color
-    let isFirst: Bool
-    let isLast: Bool
 
-    init(title: String, value: String, subtitle: String, color: Color, isFirst: Bool, isLast: Bool = false) {
-        self.title = title
-        self.value = value
-        self.subtitle = subtitle
-        self.color = color
-        self.isFirst = isFirst
-        self.isLast = isLast
-    }
-
-    var body: some View {
-        VStack(spacing: 8) {
-            VStack(spacing: 4) {
-                Text(value)
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(color)
-
-                Text(title)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundColor(.primary)
-
-                Text(subtitle)
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-        .padding(.horizontal, 12)
-        .background(
-            Rectangle()
-                .fill(Color.clear)
-                .overlay(
-                    HStack {
-                        if !isLast {
-                            Spacer()
-                            Divider()
-                        }
-                    }
-                )
-        )
-    }
-}
 
 // MARK: - Utility Views
 
-struct StatPill: View {
-    let title: String
-    let value: String
-    let systemImage: String
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: systemImage)
-                .font(.caption)
-                .foregroundColor(.secondary)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(value)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                Text(title)
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color(UIColor.systemBackground))
-        .cornerRadius(8)
-    }
-}
 
 // MARK: - Extensions
 
