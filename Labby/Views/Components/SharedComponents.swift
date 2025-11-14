@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 // MARK: - Error Handling Components
 
