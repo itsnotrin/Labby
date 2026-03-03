@@ -666,89 +666,87 @@ struct ProxmoxDetailView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                LazyVStack(spacing: 16) {
-                    if let error = vm.error {
-                        ErrorCard(message: error)
-                    }
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                if let error = vm.error {
+                    ErrorCard(message: error)
+                }
 
-                    if vm.isLoading {
-                        ProgressView("Loading detailed data...")
-                            .frame(maxWidth: .infinity, minHeight: 100)
-                    } else {
-                        // Cluster Overview
-                        ClusterStatusSection(stats: vm.stats)
+                if vm.isLoading {
+                    ProgressView("Loading detailed data...")
+                        .frame(maxWidth: .infinity, minHeight: 100)
+                } else {
+                    // Cluster Overview
+                    ClusterStatusSection(stats: vm.stats)
 
-                        // Navigation Grid
-                        NavigationGridSection(config: config, vm: vm)
+                    // Navigation Grid
+                    NavigationGridSection(config: config, vm: vm)
 
-                        // Nodes Overview
-                        NodesOverviewSection(nodes: vm.nodes)
+                    // Nodes Overview
+                    NodesOverviewSection(nodes: vm.nodes)
 
-                        // VMs and Containers Summary
-                        VMsContainersSummarySection(vms: vm.vms)
+                    // VMs and Containers Summary
+                    VMsContainersSummarySection(vms: vm.vms)
 
-                        // Storage Overview
-                        StorageOverviewSection(storage: vm.storage)
+                    // Storage Overview
+                    StorageOverviewSection(storage: vm.storage)
 
-                        // Cache status (for debugging)
-                        if vm.isUsingCachedData || vm.lastCacheUpdate != nil {
-                            VStack(alignment: .leading, spacing: 4) {
-                                if vm.isUsingCachedData {
-                                    Label("Using cached data", systemImage: "clock")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                if let lastUpdate = vm.lastCacheUpdate {
-                                    Text("Last updated: \(lastUpdate, style: .relative) ago")
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                }
+                    // Cache status (for debugging)
+                    if vm.isUsingCachedData || vm.lastCacheUpdate != nil {
+                        VStack(alignment: .leading, spacing: 4) {
+                            if vm.isUsingCachedData {
+                                Label("Using cached data", systemImage: "clock")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
                             }
-                            .padding(.horizontal)
-                            .padding(.top, 8)
+                            if let lastUpdate = vm.lastCacheUpdate {
+                                Text("Last updated: \(lastUpdate, style: .relative) ago")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
                         }
+                        .padding(.horizontal)
+                        .padding(.top, 8)
                     }
                 }
-                .padding()
             }
-            .navigationTitle("Proxmox Dashboard")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Menu {
-                        Button {
-                            Task { await vm.refresh() }
-                        } label: {
-                            HStack {
-                                Text("Refresh")
-                                Image(systemName: "arrow.clockwise")
-                            }
-                        }
-                        .disabled(vm.isLoading)
-
-                        Button {
-                            vm.refreshCache()
-                        } label: {
-                            HStack {
-                                Text("Clear Cache & Refresh")
-                                Image(systemName: "trash")
-                            }
-                        }
-                        .disabled(vm.isLoading)
+            .padding()
+        }
+        .navigationTitle("Proxmox Dashboard")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Menu {
+                    Button {
+                        Task { await vm.refresh() }
                     } label: {
-                        Image(systemName: "arrow.clockwise")
+                        HStack {
+                            Text("Refresh")
+                            Image(systemName: "arrow.clockwise")
+                        }
                     }
                     .disabled(vm.isLoading)
+
+                    Button {
+                        vm.refreshCache()
+                    } label: {
+                        HStack {
+                            Text("Clear Cache & Refresh")
+                            Image(systemName: "trash")
+                        }
+                    }
+                    .disabled(vm.isLoading)
+                } label: {
+                    Image(systemName: "arrow.clockwise")
                 }
+                .disabled(vm.isLoading)
             }
-            .onAppear {
-                vm.startAutoRefresh()
-            }
-            .onDisappear {
-                vm.stopAutoRefresh()
-            }
+        }
+        .onAppear {
+            vm.startAutoRefresh()
+        }
+        .onDisappear {
+            vm.stopAutoRefresh()
         }
     }
 
@@ -1437,24 +1435,22 @@ struct ProxmoxDetailView: View {
         }
 
         var body: some View {
-            NavigationStack {
-                List {
-                    ForEach(vms) { vm in
-                        NavigationLink(value: vm.vmid) {
-                            VMRow(vm: vm)
-                        }
+            List {
+                ForEach(vms) { vm in
+                    NavigationLink(value: vm.vmid) {
+                        VMRow(vm: vm)
                     }
                 }
-                .navigationDestination(for: String.self) { vmid in
-                    if let vm = vms.first(where: { $0.vmid == vmid }) {
-                        ProxmoxVMDetailView(config: config, vm: vm)
-                    }
-                }
-                .refreshable {
-                    await refreshData()
-                }
-                .navigationTitle("Virtual Machines (\(vms.count))")
             }
+            .navigationDestination(for: String.self) { vmid in
+                if let vm = vms.first(where: { $0.vmid == vmid }) {
+                    ProxmoxVMDetailView(config: config, vm: vm)
+                }
+            }
+            .refreshable {
+                await refreshData()
+            }
+            .navigationTitle("Virtual Machines (\(vms.count))")
         }
 
         private func refreshData() async {
@@ -1493,24 +1489,22 @@ struct ProxmoxDetailView: View {
         }
 
         var body: some View {
-            NavigationStack {
-                List {
-                    ForEach(containers) { container in
-                        NavigationLink(value: container.vmid) {
-                            VMRow(vm: container)
-                        }
+            List {
+                ForEach(containers) { container in
+                    NavigationLink(value: container.vmid) {
+                        VMRow(vm: container)
                     }
                 }
-                .navigationDestination(for: String.self) { vmid in
-                    if let container = containers.first(where: { $0.vmid == vmid }) {
-                        ProxmoxVMDetailView(config: config, vm: container)
-                    }
-                }
-                .refreshable {
-                    await refreshData()
-                }
-                .navigationTitle("Containers (\(containers.count))")
             }
+            .navigationDestination(for: String.self) { vmid in
+                if let container = containers.first(where: { $0.vmid == vmid }) {
+                    ProxmoxVMDetailView(config: config, vm: container)
+                }
+            }
+            .refreshable {
+                await refreshData()
+            }
+            .navigationTitle("Containers (\(containers.count))")
         }
 
         private func refreshData() async {
