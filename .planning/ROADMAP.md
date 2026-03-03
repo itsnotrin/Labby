@@ -42,7 +42,9 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Concurrent reads and writes to JellyfinClient cached auth state do not produce undefined behavior
   3. Concurrent access to PiHoleClient session state does not produce undefined behavior
   4. Concurrent access to ProxmoxClient.netSnapshots does not produce undefined behavior
-**Plans**: TBD
+**Plans:** 2 plans
+- [ ] 02-01-PLAN.md — Fix timer retain cycles in PiHole and Proxmox ViewModels ([weak self] capture)
+- [ ] 02-02-PLAN.md — Convert JellyfinClient, PiHoleClient, and ProxmoxClient from final class to actor for thread-safe state access
 
 ### Phase 3: Session Management
 **Goal**: All services correctly scope, cache, and recover their authentication sessions
@@ -88,7 +90,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Crashes & Navigation | 2/2 | Complete   | 2026-03-03 |
-| 2. Thread Safety | 0/TBD | Not started | - |
+| 2. Thread Safety | 0/2 | Not started | - |
 | 3. Session Management | 0/TBD | Not started | - |
 | 4. API & Data Correctness | 0/TBD | Not started | - |
 | 5. UI & Performance | 0/TBD | Not started | - |
