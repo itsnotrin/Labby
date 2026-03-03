@@ -144,7 +144,8 @@ final class PiHoleViewModel: ObservableObject {
     }
 
     func startAutoRefresh() {
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { _ in
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
             Task { await self.refresh() }
         }
         Task { await refresh() }
@@ -637,7 +638,8 @@ final class PiHoleDetailViewModel: ObservableObject {
     }
 
     func startAutoRefresh() {
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: 15.0, repeats: true) { _ in
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 15.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
             Task { await self.refresh() }
         }
         Task { await refresh() }
