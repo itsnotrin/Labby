@@ -71,22 +71,9 @@ struct QBTGlobalLimits: Equatable {
 
 extension QBittorrentClient {
 
-    // Shared (per process) simple cookie cache by service id
+    // Shared (per process) simple cookie cache by service id; used as cross-instance fallback
     private static var _cookieCache = [UUID: String]()
     private static let _cookieLock = NSLock()
-
-    // Build a session respecting insecure TLS config
-    private func makeSession() -> URLSession {
-        if config.insecureSkipTLSVerify {
-            return URLSession(
-                configuration: .ephemeral,
-                delegate: InsecureSessionDelegate(),
-                delegateQueue: nil
-            )
-        } else {
-            return URLSession(configuration: .ephemeral)
-        }
-    }
 
     private func cachedCookie() -> String? {
         Self._cookieLock.lock()
@@ -98,10 +85,11 @@ extension QBittorrentClient {
         Self._cookieLock.lock()
         Self._cookieCache[config.id] = cookie
         Self._cookieLock.unlock()
+        _instanceCookie = cookie
     }
 
-    // Login and return "SID=..." cookie pair
-    private func loginAndGetCookie(session: URLSession) async throws -> String {
+    // Login and return "SID=..." cookie pair using the shared lazy session
+    private func loginAndGetCookie() async throws -> String {
         let url = try config.url(appending: "/api/v2/auth/login")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -135,9 +123,31 @@ extension QBittorrentClient {
         throw ServiceError.httpStatus(http.statusCode)
     }
 
-    private func getCookie(session: URLSession) async throws -> String {
-        if let c = cachedCookie() { return c }
-        return try await loginAndGetCookie(session: session)
+    private func getCookie() async throws -> String {
+        if let c = _instanceCookie { return c }
+        if let c = cachedCookie() {
+            _instanceCookie = c
+            return c
+        }
+        return try await loginAndGetCookie()
+    }
+
+    // Executes an operation using the cached cookie, retrying once on 403 after re-authenticating
+    private func performWithRetry<T>(
+        _ operation: (String) async throws -> T
+    ) async throws -> T {
+        let cookie = try await getCookie()
+        do {
+            return try await operation(cookie)
+        } catch ServiceError.httpStatus(let code) where code == 403 {
+            // Session expired -- clear cookie, re-authenticate, retry once
+            Self._cookieLock.lock()
+            Self._cookieCache.removeValue(forKey: config.id)
+            Self._cookieLock.unlock()
+            _instanceCookie = nil
+            let newCookie = try await loginAndGetCookie()
+            return try await operation(newCookie)
+        }
     }
 
     // Small helpers copied here (can't access file-private ones across files)
@@ -184,145 +194,144 @@ extension QBittorrentClient {
     // MARK: Public async APIs used by the views
 
     func listTorrents() async throws -> [QBTorrentInfo] {
-        let session = makeSession()
-        let cookie = try await getCookie(session: session)
-        let req = try makeAuthedRequest(path: "/api/v2/torrents/info", cookie: cookie)
-        let (data, response) = try await session.data(for: req)
-        guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
-            throw ServiceError.httpStatus((response as? HTTPURLResponse)?.statusCode ?? -1)
+        try await performWithRetry { cookie in
+            let req = try self.makeAuthedRequest(path: "/api/v2/torrents/info", cookie: cookie)
+            let (data, response) = try await self.session.data(for: req)
+            guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
+                throw ServiceError.httpStatus((response as? HTTPURLResponse)?.statusCode ?? -1)
+            }
+            return try JSONDecoder().decode([QBTorrentInfo].self, from: data)
         }
-        return try JSONDecoder().decode([QBTorrentInfo].self, from: data)
     }
 
     func pauseTorrent(hash: String) async throws {
-        let session = makeSession()
-        let cookie = try await getCookie(session: session)
-        let body = "hashes=\(hash)".data(using: .utf8)
-        let req = try makeAuthedRequest(
-            path: "/api/v2/torrents/pause", method: "POST", cookie: cookie, body: body,
-            contentType: "application/x-www-form-urlencoded"
-        )
-        let (_, response) = try await session.data(for: req)
-        guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
-            throw ServiceError.httpStatus((response as? HTTPURLResponse)?.statusCode ?? -1)
+        try await performWithRetry { cookie in
+            let body = "hashes=\(hash)".data(using: .utf8)
+            let req = try self.makeAuthedRequest(
+                path: "/api/v2/torrents/pause", method: "POST", cookie: cookie, body: body,
+                contentType: "application/x-www-form-urlencoded"
+            )
+            let (_, response) = try await self.session.data(for: req)
+            guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
+                throw ServiceError.httpStatus((response as? HTTPURLResponse)?.statusCode ?? -1)
+            }
         }
     }
 
     func resumeTorrent(hash: String) async throws {
-        let session = makeSession()
-        let cookie = try await getCookie(session: session)
-        let body = "hashes=\(hash)".data(using: .utf8)
-        let req = try makeAuthedRequest(
-            path: "/api/v2/torrents/resume", method: "POST", cookie: cookie, body: body,
-            contentType: "application/x-www-form-urlencoded"
-        )
-        let (_, response) = try await session.data(for: req)
-        guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
-            throw ServiceError.httpStatus((response as? HTTPURLResponse)?.statusCode ?? -1)
+        try await performWithRetry { cookie in
+            let body = "hashes=\(hash)".data(using: .utf8)
+            let req = try self.makeAuthedRequest(
+                path: "/api/v2/torrents/resume", method: "POST", cookie: cookie, body: body,
+                contentType: "application/x-www-form-urlencoded"
+            )
+            let (_, response) = try await self.session.data(for: req)
+            guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
+                throw ServiceError.httpStatus((response as? HTTPURLResponse)?.statusCode ?? -1)
+            }
         }
     }
 
     func torrentProperties(hash: String) async throws -> QBTorrentProperties {
-        let session = makeSession()
-        let cookie = try await getCookie(session: session)
-        let req = try makeAuthedRequest(
-            path: "/api/v2/torrents/properties",
-            queryItems: [URLQueryItem(name: "hash", value: hash)],
-            cookie: cookie
-        )
-        let (data, response) = try await session.data(for: req)
-        guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
-            throw ServiceError.httpStatus((response as? HTTPURLResponse)?.statusCode ?? -1)
+        try await performWithRetry { cookie in
+            let req = try self.makeAuthedRequest(
+                path: "/api/v2/torrents/properties",
+                queryItems: [URLQueryItem(name: "hash", value: hash)],
+                cookie: cookie
+            )
+            let (data, response) = try await self.session.data(for: req)
+            guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
+                throw ServiceError.httpStatus((response as? HTTPURLResponse)?.statusCode ?? -1)
+            }
+            return try JSONDecoder().decode(QBTorrentProperties.self, from: data)
         }
-        return try JSONDecoder().decode(QBTorrentProperties.self, from: data)
     }
 
     func torrentFiles(hash: String) async throws -> [QBTorrentFile] {
-        let session = makeSession()
-        let cookie = try await getCookie(session: session)
-        let req = try makeAuthedRequest(
-            path: "/api/v2/torrents/files",
-            queryItems: [URLQueryItem(name: "hash", value: hash)],
-            cookie: cookie
-        )
-        let (data, response) = try await session.data(for: req)
-        guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
-            throw ServiceError.httpStatus((response as? HTTPURLResponse)?.statusCode ?? -1)
+        try await performWithRetry { cookie in
+            let req = try self.makeAuthedRequest(
+                path: "/api/v2/torrents/files",
+                queryItems: [URLQueryItem(name: "hash", value: hash)],
+                cookie: cookie
+            )
+            let (data, response) = try await self.session.data(for: req)
+            guard let http = response as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
+                throw ServiceError.httpStatus((response as? HTTPURLResponse)?.statusCode ?? -1)
+            }
+            return try JSONDecoder().decode([QBTorrentFile].self, from: data)
         }
-        return try JSONDecoder().decode([QBTorrentFile].self, from: data)
     }
 
     func globalLimits() async throws -> QBTGlobalLimits {
-        let session = makeSession()
-        let cookie = try await getCookie(session: session)
+        try await performWithRetry { cookie in
+            // Download limit
+            let dlReq = try self.makeAuthedRequest(path: "/api/v2/transfer/downloadLimit", cookie: cookie)
+            let (dlData, dlResp) = try await self.session.data(for: dlReq)
+            guard let dlHTTP = dlResp as? HTTPURLResponse, 200..<300 ~= dlHTTP.statusCode else {
+                throw ServiceError.httpStatus((dlResp as? HTTPURLResponse)?.statusCode ?? -1)
+            }
+            let dlString = String(data: dlData, encoding: .utf8) ?? "0"
+            let dlVal = Int(dlString.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
 
-        // Download limit
-        let dlReq = try makeAuthedRequest(path: "/api/v2/transfer/downloadLimit", cookie: cookie)
-        let (dlData, dlResp) = try await session.data(for: dlReq)
-        guard let dlHTTP = dlResp as? HTTPURLResponse, 200..<300 ~= dlHTTP.statusCode else {
-            throw ServiceError.httpStatus((dlResp as? HTTPURLResponse)?.statusCode ?? -1)
+            // Upload limit
+            let ulReq = try self.makeAuthedRequest(path: "/api/v2/transfer/uploadLimit", cookie: cookie)
+            let (ulData, ulResp) = try await self.session.data(for: ulReq)
+            guard let ulHTTP = ulResp as? HTTPURLResponse, 200..<300 ~= ulHTTP.statusCode else {
+                throw ServiceError.httpStatus((ulResp as? HTTPURLResponse)?.statusCode ?? -1)
+            }
+            let ulString = String(data: ulData, encoding: .utf8) ?? "0"
+            let ulVal = Int(ulString.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+
+            // Mode
+            let modeReq = try self.makeAuthedRequest(path: "/api/v2/transfer/speedLimitsMode", cookie: cookie)
+            let (modeData, modeResp) = try await self.session.data(for: modeReq)
+            guard let modeHTTP = modeResp as? HTTPURLResponse, 200..<300 ~= modeHTTP.statusCode else {
+                throw ServiceError.httpStatus((modeResp as? HTTPURLResponse)?.statusCode ?? -1)
+            }
+            let modeString = String(data: modeData, encoding: .utf8) ?? "0"
+            let alt = (Int(modeString.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0) == 1
+
+            return QBTGlobalLimits(downloadLimitBps: dlVal, uploadLimitBps: ulVal, alternativeModeEnabled: alt)
         }
-        let dlString = String(data: dlData, encoding: .utf8) ?? "0"
-        let dlVal = Int(dlString.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
-
-        // Upload limit
-        let ulReq = try makeAuthedRequest(path: "/api/v2/transfer/uploadLimit", cookie: cookie)
-        let (ulData, ulResp) = try await session.data(for: ulReq)
-        guard let ulHTTP = ulResp as? HTTPURLResponse, 200..<300 ~= ulHTTP.statusCode else {
-            throw ServiceError.httpStatus((ulResp as? HTTPURLResponse)?.statusCode ?? -1)
-        }
-        let ulString = String(data: ulData, encoding: .utf8) ?? "0"
-        let ulVal = Int(ulString.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
-
-        // Mode
-        let modeReq = try makeAuthedRequest(path: "/api/v2/transfer/speedLimitsMode", cookie: cookie)
-        let (modeData, modeResp) = try await session.data(for: modeReq)
-        guard let modeHTTP = modeResp as? HTTPURLResponse, 200..<300 ~= modeHTTP.statusCode else {
-            throw ServiceError.httpStatus((modeResp as? HTTPURLResponse)?.statusCode ?? -1)
-        }
-        let modeString = String(data: modeData, encoding: .utf8) ?? "0"
-        let alt = (Int(modeString.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0) == 1
-
-        return QBTGlobalLimits(downloadLimitBps: dlVal, uploadLimitBps: ulVal, alternativeModeEnabled: alt)
     }
 
     func setGlobalDownloadLimit(_ bytesPerSec: Int) async throws {
-        let session = makeSession()
-        let cookie = try await getCookie(session: session)
-        let body = "limit=\(bytesPerSec)".data(using: .utf8)
-        let req = try makeAuthedRequest(
-            path: "/api/v2/transfer/setDownloadLimit", method: "POST", cookie: cookie, body: body,
-            contentType: "application/x-www-form-urlencoded"
-        )
-        let (_, resp) = try await session.data(for: req)
-        guard let http = resp as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
-            throw ServiceError.httpStatus((resp as? HTTPURLResponse)?.statusCode ?? -1)
+        try await performWithRetry { cookie in
+            let body = "limit=\(bytesPerSec)".data(using: .utf8)
+            let req = try self.makeAuthedRequest(
+                path: "/api/v2/transfer/setDownloadLimit", method: "POST", cookie: cookie, body: body,
+                contentType: "application/x-www-form-urlencoded"
+            )
+            let (_, resp) = try await self.session.data(for: req)
+            guard let http = resp as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
+                throw ServiceError.httpStatus((resp as? HTTPURLResponse)?.statusCode ?? -1)
+            }
         }
     }
 
     func setGlobalUploadLimit(_ bytesPerSec: Int) async throws {
-        let session = makeSession()
-        let cookie = try await getCookie(session: session)
-        let body = "limit=\(bytesPerSec)".data(using: .utf8)
-        let req = try makeAuthedRequest(
-            path: "/api/v2/transfer/setUploadLimit", method: "POST", cookie: cookie, body: body,
-            contentType: "application/x-www-form-urlencoded"
-        )
-        let (_, resp) = try await session.data(for: req)
-        guard let http = resp as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
-            throw ServiceError.httpStatus((resp as? HTTPURLResponse)?.statusCode ?? -1)
+        try await performWithRetry { cookie in
+            let body = "limit=\(bytesPerSec)".data(using: .utf8)
+            let req = try self.makeAuthedRequest(
+                path: "/api/v2/transfer/setUploadLimit", method: "POST", cookie: cookie, body: body,
+                contentType: "application/x-www-form-urlencoded"
+            )
+            let (_, resp) = try await self.session.data(for: req)
+            guard let http = resp as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
+                throw ServiceError.httpStatus((resp as? HTTPURLResponse)?.statusCode ?? -1)
+            }
         }
     }
 
     func toggleAlternativeSpeedLimits() async throws {
-        let session = makeSession()
-        let cookie = try await getCookie(session: session)
-        let req = try makeAuthedRequest(
-            path: "/api/v2/transfer/toggleSpeedLimitsMode", method: "POST", cookie: cookie
-        )
-        let (_, resp) = try await session.data(for: req)
-        guard let http = resp as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
-            throw ServiceError.httpStatus((resp as? HTTPURLResponse)?.statusCode ?? -1)
+        try await performWithRetry { cookie in
+            let req = try self.makeAuthedRequest(
+                path: "/api/v2/transfer/toggleSpeedLimitsMode", method: "POST", cookie: cookie
+            )
+            let (_, resp) = try await self.session.data(for: req)
+            guard let http = resp as? HTTPURLResponse, 200..<300 ~= http.statusCode else {
+                throw ServiceError.httpStatus((resp as? HTTPURLResponse)?.statusCode ?? -1)
+            }
         }
     }
 }

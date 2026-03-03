@@ -10,8 +10,12 @@ import Foundation
 final class QBittorrentClient: ServiceClient {
     let config: ServiceConfig
 
+    // In-memory cookie cache for this instance; internal so QBittorrent.swift extension can access it
+    var _instanceCookie: String?
+
     // Reuse a single URLSession per client (respecting insecure TLS option)
-    private lazy var session: URLSession = {
+    // Internal access (not private) so the QBittorrent.swift extension can reuse it
+    lazy var session: URLSession = {
         if config.insecureSkipTLSVerify {
             return URLSession(
                 configuration: .ephemeral,
@@ -28,6 +32,16 @@ final class QBittorrentClient: ServiceClient {
     }
 
     func testConnection() async throws -> String {
+        do {
+            return try await _testConnection()
+        } catch ServiceError.httpStatus(let code) where code == 403 {
+            // Session expired -- force re-authenticate and retry once
+            _instanceCookie = nil
+            return try await _testConnection()
+        }
+    }
+
+    private func _testConnection() async throws -> String {
         let sessionCookie = try await authenticate()
 
         let url = try config.url(appending: "/api/v2/app/version")
@@ -62,7 +76,10 @@ final class QBittorrentClient: ServiceClient {
         }
     }
 
-    private func authenticate() async throws -> String {
+    func authenticate(forceReauth: Bool = false) async throws -> String {
+        if !forceReauth, let cookie = _instanceCookie {
+            return cookie
+        }
         let url = try config.url(appending: "/api/v2/auth/login")
 
         var request = URLRequest(url: url)
@@ -93,6 +110,7 @@ final class QBittorrentClient: ServiceClient {
                 ?? headerValue(http, for: "set-cookie")
             {
                 if let sidPair = extractSIDCookie(from: setCookie) {
+                    _instanceCookie = sidPair
                     return sidPair
                 }
             }
@@ -114,6 +132,16 @@ final class QBittorrentClient: ServiceClient {
     }
 
     func fetchStats() async throws -> ServiceStatsPayload {
+        do {
+            return try await _fetchStats()
+        } catch ServiceError.httpStatus(let code) where code == 403 {
+            // Session expired -- force re-authenticate and retry once
+            _instanceCookie = nil
+            return try await _fetchStats()
+        }
+    }
+
+    private func _fetchStats() async throws -> ServiceStatsPayload {
         let sessionCookie = try await authenticate()
 
         // Transfer info
