@@ -331,18 +331,13 @@ struct HomeView: View {
         @State private var isLoadingStats = false
 
         var body: some View {
-            Group {
-                if isEditing {
-                    widgetContent
-                        .onTapGesture {
-                            onEdit()
-                        }
-                } else {
-                    NavigationLink(destination: destinationView(for: config)) {
-                        widgetContent
+            if isEditing {
+                widgetContent
+                    .onTapGesture {
+                        onEdit()
                     }
-                    .buttonStyle(.plain)
-                }
+            } else {
+                widgetContent
             }
         }
 
@@ -571,19 +566,6 @@ struct HomeView: View {
             }
         }
 
-        @ViewBuilder
-        private func destinationView(for config: ServiceConfig) -> some View {
-            switch config.kind {
-            case .proxmox:
-                ProxmoxView(config: config)
-            case .jellyfin:
-                JellyfinView(config: config)
-            case .qbittorrent:
-                QBittorrentView(config: config)
-            case .pihole:
-                PiHoleView(config: config)
-            }
-        }
     }
 
     struct HomeContentView: View {
