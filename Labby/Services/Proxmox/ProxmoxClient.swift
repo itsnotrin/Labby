@@ -7,8 +7,23 @@
 
 import Foundation
 
-final class ProxmoxClient: ServiceClient {
-    private static var netSnapshots: [UUID: (ts: TimeInterval, inBytes: Int64, outBytes: Int64)] = [:]
+// Dedicated actor to protect the static netSnapshots dictionary shared across
+// all ProxmoxClient instances. Using a separate actor rather than nonisolated(unsafe)
+// ensures true data isolation without relying on manual verification.
+private actor NetSnapshotStore {
+    static let shared = NetSnapshotStore()
+    private var snapshots: [UUID: (ts: TimeInterval, inBytes: Int64, outBytes: Int64)] = [:]
+
+    func get(_ id: UUID) -> (ts: TimeInterval, inBytes: Int64, outBytes: Int64)? {
+        snapshots[id]
+    }
+
+    func set(_ id: UUID, value: (ts: TimeInterval, inBytes: Int64, outBytes: Int64)) {
+        snapshots[id] = value
+    }
+}
+
+actor ProxmoxClient: ServiceClient {
     let config: ServiceConfig
 
     // Cache properties
@@ -24,7 +39,8 @@ final class ProxmoxClient: ServiceClient {
     // Cache expiry duration (5 minutes)
     private let cacheExpiryDuration: TimeInterval = 300
 
-    private lazy var session: URLSession = {
+    // URLSession is internally thread-safe; nonisolated(unsafe) opts out of actor isolation.
+    nonisolated(unsafe) private lazy var session: URLSession = {
         if config.insecureSkipTLSVerify {
             return URLSession(
                 configuration: .ephemeral,
@@ -171,7 +187,7 @@ final class ProxmoxClient: ServiceClient {
             }
 
             let now = Date().timeIntervalSince1970
-            let prev = ProxmoxClient.netSnapshots[config.id]
+            let prev = await NetSnapshotStore.shared.get(config.id)
             var upBps = 0.0
             var downBps = 0.0
             if let prev = prev {
@@ -183,7 +199,7 @@ final class ProxmoxClient: ServiceClient {
                     upBps = max(0, dOut / dt)
                 }
             }
-            ProxmoxClient.netSnapshots[config.id] = (ts: now, inBytes: totalNetIn, outBytes: totalNetOut)
+            await NetSnapshotStore.shared.set(config.id, value: (ts: now, inBytes: totalNetIn, outBytes: totalNetOut))
 
             let stats = ProxmoxStats(
                 cpuUsagePercent: avgCPU,

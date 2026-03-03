@@ -219,8 +219,8 @@ final class ProxmoxViewModel: ObservableObject {
 
     func refreshCache() {
         print("ProxmoxViewModel: Refreshing cache by clearing client cache")
-        client.clearCache()
         Task {
+            await client.clearCache()
             await refresh()
         }
     }
@@ -800,9 +800,9 @@ struct ProxmoxDetailView: View {
 
         func refreshCache() {
             print("ProxmoxDetailViewModel: Refreshing cache by clearing client cache")
-            client.clearCache()
             isUsingCachedData = false
             Task {
+                await client.clearCache()
                 await refresh()
             }
         }
@@ -1766,7 +1766,7 @@ struct ProxmoxDetailView: View {
 
         private func refreshVMStatus() async {
             // Clear all caches to ensure fresh data
-            client.clearCache()
+            await client.clearCache()
 
             do {
                 let freshVMs = try await client.fetchVMs()
