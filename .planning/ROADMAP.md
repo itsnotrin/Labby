@@ -56,7 +56,9 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. qBittorrent session cookies persist across API calls so the service is not IP-banned
   4. qBittorrent automatically re-authenticates and retries when it receives a 403 response
   5. PiHole session tokens are stored in Keychain, not UserDefaults
-**Plans**: TBD
+**Plans:** 2 plans
+- [ ] 03-01-PLAN.md — Scope PiHole session keys per-instance and migrate session token storage from UserDefaults to Keychain
+- [ ] 03-02-PLAN.md — Add ServiceManager client instance caching, fix qBittorrent session cookie reuse, and add 403 retry logic
 
 ### Phase 4: API & Data Correctness
 **Goal**: All API calls use the correct method and parameters, and all data computations are accurate
@@ -91,6 +93,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Crashes & Navigation | 2/2 | Complete   | 2026-03-03 |
 | 2. Thread Safety | 2/2 | Complete   | 2026-03-03 |
-| 3. Session Management | 0/TBD | Not started | - |
+| 3. Session Management | 0/2 | Not started | - |
 | 4. API & Data Correctness | 0/TBD | Not started | - |
 | 5. UI & Performance | 0/TBD | Not started | - |
