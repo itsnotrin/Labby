@@ -5,10 +5,9 @@ actor PiHoleClient: ServiceClient {
     private var sid: String?
     private var csrf: String?
     private var sidExpiry: Date?
-    private let sessionDefaults = UserDefaults.standard
-    private let defaultsKeySID = "PiHoleClient.sid"
-    private let defaultsKeyCSRF = "PiHoleClient.csrf"
-    private let defaultsKeySidExpiry = "PiHoleClient.sidExpiry"
+    private var keychainKeySID: String { "PiHoleClient.\(config.id.uuidString).sid" }
+    private var keychainKeyCSRF: String { "PiHoleClient.\(config.id.uuidString).csrf" }
+    private var keychainKeySidExpiry: String { "PiHoleClient.\(config.id.uuidString).sidExpiry" }
 
     // URLSession is internally thread-safe; nonisolated(unsafe) opts out of actor isolation.
     nonisolated(unsafe) private lazy var session: URLSession = {
@@ -537,41 +536,73 @@ actor PiHoleClient: ServiceClient {
     }
     // Session cache helpers
     private func loadSessionCache() {
-        if let savedSID = sessionDefaults.string(forKey: defaultsKeySID) {
+        // Migration: move any existing UserDefaults values to Keychain, then delete from UserDefaults
+        let legacyKeySID = "PiHoleClient.sid"
+        let legacyKeyCSRF = "PiHoleClient.csrf"
+        let legacyKeySidExpiry = "PiHoleClient.sidExpiry"
+        let defaults = UserDefaults.standard
+
+        if let oldSID = defaults.string(forKey: legacyKeySID) {
+            if let data = oldSID.data(using: .utf8) {
+                KeychainStorage.shared.saveSecret(data, forKey: keychainKeySID)
+            }
+            defaults.removeObject(forKey: legacyKeySID)
+        }
+        if let oldCSRF = defaults.string(forKey: legacyKeyCSRF) {
+            if let data = oldCSRF.data(using: .utf8) {
+                KeychainStorage.shared.saveSecret(data, forKey: keychainKeyCSRF)
+            }
+            defaults.removeObject(forKey: legacyKeyCSRF)
+        }
+        if let oldExpiry = defaults.object(forKey: legacyKeySidExpiry) as? TimeInterval {
+            let str = String(oldExpiry)
+            if let data = str.data(using: .utf8) {
+                KeychainStorage.shared.saveSecret(data, forKey: keychainKeySidExpiry)
+            }
+            defaults.removeObject(forKey: legacyKeySidExpiry)
+        }
+
+        // Load from Keychain
+        if let data = KeychainStorage.shared.loadSecret(forKey: keychainKeySID),
+           let savedSID = String(data: data, encoding: .utf8) {
             self.sid = savedSID
         }
-        if let savedCSRF = sessionDefaults.string(forKey: defaultsKeyCSRF) {
+        if let data = KeychainStorage.shared.loadSecret(forKey: keychainKeyCSRF),
+           let savedCSRF = String(data: data, encoding: .utf8) {
             self.csrf = savedCSRF
         }
-        if let ts = sessionDefaults.object(forKey: defaultsKeySidExpiry) as? TimeInterval {
+        if let data = KeychainStorage.shared.loadSecret(forKey: keychainKeySidExpiry),
+           let str = String(data: data, encoding: .utf8),
+           let ts = TimeInterval(str) {
             let date = Date(timeIntervalSince1970: ts)
-            // Only keep if still valid
             if date > Date() {
                 self.sidExpiry = date
             } else {
-                // Expired; clear any stale values
                 clearSessionCache()
             }
         }
     }
     private func saveSessionCache() {
-        if let sid = self.sid {
-            sessionDefaults.set(sid, forKey: defaultsKeySID)
+        if let sid = self.sid, let data = sid.data(using: .utf8) {
+            KeychainStorage.shared.saveSecret(data, forKey: keychainKeySID)
         }
-        if let csrf = self.csrf {
-            sessionDefaults.set(csrf, forKey: defaultsKeyCSRF)
+        if let csrf = self.csrf, let data = csrf.data(using: .utf8) {
+            KeychainStorage.shared.saveSecret(data, forKey: keychainKeyCSRF)
         }
         if let expiry = self.sidExpiry {
-            sessionDefaults.set(expiry.timeIntervalSince1970, forKey: defaultsKeySidExpiry)
+            let str = String(expiry.timeIntervalSince1970)
+            if let data = str.data(using: .utf8) {
+                KeychainStorage.shared.saveSecret(data, forKey: keychainKeySidExpiry)
+            }
         }
     }
     private func clearSessionCache() {
         self.sid = nil
         self.csrf = nil
         self.sidExpiry = nil
-        sessionDefaults.removeObject(forKey: defaultsKeySID)
-        sessionDefaults.removeObject(forKey: defaultsKeyCSRF)
-        sessionDefaults.removeObject(forKey: defaultsKeySidExpiry)
+        KeychainStorage.shared.deleteSecret(forKey: keychainKeySID)
+        KeychainStorage.shared.deleteSecret(forKey: keychainKeyCSRF)
+        KeychainStorage.shared.deleteSecret(forKey: keychainKeySidExpiry)
     }
 
     // MARK: - Extended API Methods for Detailed View
