@@ -16,6 +16,7 @@ final class ServiceManager: ObservableObject {
     private let storageKey = "service.configs.v1"
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
+    private var clientCache: [UUID: ServiceClient] = [:]
 
     private init() {
         load()
@@ -27,27 +28,35 @@ final class ServiceManager: ObservableObject {
     }
 
     func removeService(id: UUID) {
+        clientCache.removeValue(forKey: id)
         services.removeAll { $0.id == id }
         persist()
     }
 
     func updateService(_ config: ServiceConfig) {
+        clientCache.removeValue(forKey: config.id)
         guard let idx = services.firstIndex(where: { $0.id == config.id }) else { return }
         services[idx] = config
         persist()
     }
 
     func client(for config: ServiceConfig) -> ServiceClient {
+        if let cached = clientCache[config.id] {
+            return cached
+        }
+        let newClient: ServiceClient
         switch config.kind {
         case .proxmox:
-            return ProxmoxClient(config: config)
+            newClient = ProxmoxClient(config: config)
         case .jellyfin:
-            return JellyfinClient(config: config)
+            newClient = JellyfinClient(config: config)
         case .qbittorrent:
-            return QBittorrentClient(config: config)
+            newClient = QBittorrentClient(config: config)
         case .pihole:
-            return PiHoleClient(config: config)
+            newClient = PiHoleClient(config: config)
         }
+        clientCache[config.id] = newClient
+        return newClient
     }
 
     // MARK: - Persistence
@@ -82,6 +91,7 @@ final class ServiceManager: ObservableObject {
                 KeychainStorage.shared.deleteSecret(forKey: tokenSecretKeychainKey)
             }
         }
+        clientCache.removeAll()
         services.removeAll()
         UserDefaults.standard.removeObject(forKey: storageKey)
         HomeLayoutStore.shared.removeAllHomes()
