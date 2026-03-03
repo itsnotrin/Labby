@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-03T10:26:44.681Z"
+last_updated: "2026-03-03T10:40:53.445Z"
 progress:
-  total_phases: 1
+  total_phases: 2
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_plans: 4
+  completed_plans: 3
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Fix all identified bugs to make Labby stable, reliable, and correct
-**Current focus:** Phase 1 - Crashes & Navigation
+**Current focus:** Phase 2 - Thread Safety
 
 ## Current Position
 
-Phase: 1 of 5 (Crashes & Navigation)
-Plan: 2 of TBD in current phase
+Phase: 2 of 5 (Thread Safety)
+Plan: 1 of TBD in current phase
 Status: In progress
-Last activity: 2026-03-03 — Completed plan 01-01 (Fix AddWidgetView crash and double-push navigation)
+Last activity: 2026-03-03 — Completed plan 02-01 (Fix timer retain cycles in all four ViewModels)
 
-Progress: [█░░░░░░░░░] ~5%
+Progress: [██░░░░░░░░] ~15%
 
 ## Performance Metrics
 
@@ -41,9 +41,10 @@ Progress: [█░░░░░░░░░] ~5%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-crashes-navigation | 2 | ~6 min | ~3 min |
+| 02-thread-safety | 1 | ~5 min | ~5 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-02 (2min), 01-01 (4min)
+- Last 5 plans: 02-01 (5min), 01-02 (2min), 01-01 (4min)
 - Trend: Fast execution
 
 *Updated after each plan completion*
@@ -62,6 +63,7 @@ Recent decisions affecting current work:
 - 01-02: ProxmoxStorageView NavigationStack left in place — out of scope for plan 01-02
 - 01-01: Keep inner Form toolbar (safe if-let) and delete outer NavigationView toolbar (force-unwrap crash)
 - 01-01: HomeWidgetCard renders widgetContent directly; navigation belongs to HomeGridView
+- [Phase 02-thread-safety]: 02-01: Use [weak self] + guard let self = self else { return } pattern for Timer.scheduledTimer closures — matches existing ProxmoxDetailViewModelLarge pattern in codebase
 
 ### Pending Todos
 
@@ -74,5 +76,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed 01-01-PLAN.md — ready for next plan
+Stopped at: Completed 02-01-PLAN.md — ready for next plan
 Resume file: None
