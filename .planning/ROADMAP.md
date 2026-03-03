@@ -12,7 +12,7 @@ Thirty-three bugs discovered through a comprehensive audit are addressed across 
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Crashes & Navigation** - Eliminate force-unwrap crashes and broken navigation patterns
+- [x] **Phase 1: Crashes & Navigation** - Eliminate force-unwrap crashes and broken navigation patterns (completed 2026-03-03)
 - [ ] **Phase 2: Thread Safety** - Resolve all race conditions and timer retain cycles
 - [ ] **Phase 3: Session Management** - Fix session scoping, caching, and retry across all services
 - [ ] **Phase 4: API & Data Correctness** - Fix broken API calls and inaccurate data computations
@@ -29,7 +29,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. The toolbar appears exactly once in HomeView with consistent logic
   3. Navigating into a widget card opens the correct detail view without double-push
   4. Proxmox detail, VMs, and Containers views open without wrapping an inner NavigationStack inside the existing navigation context
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 - [ ] 01-01-PLAN.md — Fix crash-causing force-unwraps in AddWidgetView and eliminate double-nested NavigationLink in HomeWidgetCard
 - [ ] 01-02-PLAN.md — Remove nested NavigationStack from ProxmoxDetailView, ProxmoxVMsView, and ProxmoxContainersView
 
@@ -87,7 +87,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Crashes & Navigation | 1/2 | In Progress|  |
+| 1. Crashes & Navigation | 2/2 | Complete   | 2026-03-03 |
 | 2. Thread Safety | 0/TBD | Not started | - |
 | 3. Session Management | 0/TBD | Not started | - |
 | 4. API & Data Correctness | 0/TBD | Not started | - |

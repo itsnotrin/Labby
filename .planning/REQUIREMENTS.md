@@ -7,12 +7,12 @@
 
 ### Crash Safety
 
-- [ ] **CRASH-01**: `AddWidgetView` toolbar "Add" button must not force-unwrap optionals (HomeView.swift:1577,1583)
-- [ ] **CRASH-02**: Duplicate toolbar with divergent logic must be consolidated into one safe implementation (HomeView.swift:1508-1601)
+- [x] **CRASH-01**: `AddWidgetView` toolbar "Add" button must not force-unwrap optionals (HomeView.swift:1577,1583)
+- [x] **CRASH-02**: Duplicate toolbar with divergent logic must be consolidated into one safe implementation (HomeView.swift:1508-1601)
 
 ### Navigation
 
-- [ ] **NAV-01**: `HomeWidgetCard` must not double-nest `NavigationLink` inside `HomeGridView` (HomeView.swift:722-864)
+- [x] **NAV-01**: `HomeWidgetCard` must not double-nest `NavigationLink` inside `HomeGridView` (HomeView.swift:722-864)
 - [x] **NAV-02**: `ProxmoxDetailView`, `ProxmoxVMsView`, and `ProxmoxContainersView` must not nest `NavigationStack` inside existing navigation context (Proxmox.swift:669,1440,1496)
 
 ### API Correctness
@@ -83,9 +83,9 @@ None — this is a bug fix milestone.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CRASH-01 | Phase 1 | Pending |
-| CRASH-02 | Phase 1 | Pending |
-| NAV-01 | Phase 1 | Pending |
+| CRASH-01 | Phase 1 | Complete |
+| CRASH-02 | Phase 1 | Complete |
+| NAV-01 | Phase 1 | Complete |
 | NAV-02 | Phase 1 | Complete |
 | MEM-01 | Phase 2 | Pending |
 | MEM-02 | Phase 2 | Pending |
