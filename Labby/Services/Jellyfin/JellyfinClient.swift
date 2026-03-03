@@ -7,15 +7,16 @@
 
 import Foundation
 
-final class JellyfinClient: ServiceClient {
+actor JellyfinClient: ServiceClient {
     let config: ServiceConfig
     private var cachedUserId: String?
     private var cachedAuthToken: String?
     private var authTokenTimestamp: Date?
     private let tokenExpiryDuration: TimeInterval = 3600 // 1 hour
 
-    // Reuse a single URLSession per client (respecting insecure TLS option)
-    private lazy var session: URLSession = {
+    // Reuse a single URLSession per client (respecting insecure TLS option).
+    // URLSession is internally thread-safe; nonisolated(unsafe) opts out of actor isolation.
+    nonisolated(unsafe) private lazy var session: URLSession = {
         if config.insecureSkipTLSVerify {
             return URLSession(
                 configuration: .ephemeral,
