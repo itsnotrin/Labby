@@ -29,7 +29,9 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. The toolbar appears exactly once in HomeView with consistent logic
   3. Navigating into a widget card opens the correct detail view without double-push
   4. Proxmox detail, VMs, and Containers views open without wrapping an inner NavigationStack inside the existing navigation context
-**Plans**: TBD
+**Plans:** 2 plans
+- [ ] 01-01-PLAN.md — Fix crash-causing force-unwraps in AddWidgetView and eliminate double-nested NavigationLink in HomeWidgetCard
+- [ ] 01-02-PLAN.md — Remove nested NavigationStack from ProxmoxDetailView, ProxmoxVMsView, and ProxmoxContainersView
 
 ### Phase 2: Thread Safety
 **Goal**: All ViewModels and service clients operate without memory leaks or data races
@@ -85,7 +87,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Crashes & Navigation | 0/TBD | Not started | - |
+| 1. Crashes & Navigation | 0/2 | Not started | - |
 | 2. Thread Safety | 0/TBD | Not started | - |
 | 3. Session Management | 0/TBD | Not started | - |
 | 4. API & Data Correctness | 0/TBD | Not started | - |
