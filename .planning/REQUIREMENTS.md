@@ -24,9 +24,9 @@
 ### Memory & Thread Safety
 
 - [x] **MEM-01**: Timer retain cycles in PiHoleViewModel, PiHoleDetailViewModel, ProxmoxViewModel, ProxmoxDetailViewModel must use `[weak self]` (PiHole.swift:147-149,640-643; Proxmox.swift:339-342,968-972)
-- [ ] **MEM-02**: Race conditions on `JellyfinClient` cached auth state must be resolved (JellyfinClient.swift:12-14)
-- [ ] **MEM-03**: Race conditions on `PiHoleClient` session state must be resolved (PiHoleClient.swift:5-7)
-- [ ] **MEM-04**: Race condition on `ProxmoxClient.netSnapshots` static dictionary must be resolved (ProxmoxClient.swift:11)
+- [x] **MEM-02**: Race conditions on `JellyfinClient` cached auth state must be resolved (JellyfinClient.swift:12-14)
+- [x] **MEM-03**: Race conditions on `PiHoleClient` session state must be resolved (PiHoleClient.swift:5-7)
+- [x] **MEM-04**: Race condition on `ProxmoxClient.netSnapshots` static dictionary must be resolved (ProxmoxClient.swift:11)
 
 ### Session Management
 
@@ -88,9 +88,9 @@ None — this is a bug fix milestone.
 | NAV-01 | Phase 1 | Complete |
 | NAV-02 | Phase 1 | Complete |
 | MEM-01 | Phase 2 | Complete |
-| MEM-02 | Phase 2 | Pending |
-| MEM-03 | Phase 2 | Pending |
-| MEM-04 | Phase 2 | Pending |
+| MEM-02 | Phase 2 | Complete |
+| MEM-03 | Phase 2 | Complete |
+| MEM-04 | Phase 2 | Complete |
 | SESS-01 | Phase 3 | Pending |
 | SESS-02 | Phase 3 | Pending |
 | SESS-03 | Phase 3 | Pending |
