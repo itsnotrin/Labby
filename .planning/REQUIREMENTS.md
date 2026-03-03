@@ -13,7 +13,7 @@
 ### Navigation
 
 - [ ] **NAV-01**: `HomeWidgetCard` must not double-nest `NavigationLink` inside `HomeGridView` (HomeView.swift:722-864)
-- [ ] **NAV-02**: `ProxmoxDetailView`, `ProxmoxVMsView`, and `ProxmoxContainersView` must not nest `NavigationStack` inside existing navigation context (Proxmox.swift:669,1440,1496)
+- [x] **NAV-02**: `ProxmoxDetailView`, `ProxmoxVMsView`, and `ProxmoxContainersView` must not nest `NavigationStack` inside existing navigation context (Proxmox.swift:669,1440,1496)
 
 ### API Correctness
 
@@ -86,7 +86,7 @@ None — this is a bug fix milestone.
 | CRASH-01 | Phase 1 | Pending |
 | CRASH-02 | Phase 1 | Pending |
 | NAV-01 | Phase 1 | Pending |
-| NAV-02 | Phase 1 | Pending |
+| NAV-02 | Phase 1 | Complete |
 | MEM-01 | Phase 2 | Pending |
 | MEM-02 | Phase 2 | Pending |
 | MEM-03 | Phase 2 | Pending |
