@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-03T10:45:06.217Z"
+last_updated: "2026-03-03T16:35:28Z"
 progress:
-  total_phases: 2
+  total_phases: 5
   completed_phases: 2
-  total_plans: 4
-  completed_plans: 4
+  total_plans: 5
+  completed_plans: 5
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-03)
 
 **Core value:** Fix all identified bugs to make Labby stable, reliable, and correct
-**Current focus:** Phase 2 - Thread Safety
+**Current focus:** Phase 3 - Session Management
 
 ## Current Position
 
-Phase: 2 of 5 (Thread Safety)
-Plan: 2 of TBD in current phase
+Phase: 3 of 5 (Session Management)
+Plan: 1 of TBD in current phase
 Status: In progress
-Last activity: 2026-03-03 — Completed plan 02-02 (Convert JellyfinClient, PiHoleClient, ProxmoxClient to actors)
+Last activity: 2026-03-03 — Completed plan 03-01 (PiHole session scoping and Keychain migration)
 
-Progress: [███░░░░░░░] ~20%
+Progress: [████░░░░░░] ~30%
 
 ## Performance Metrics
 
@@ -42,9 +42,10 @@ Progress: [███░░░░░░░] ~20%
 |-------|-------|-------|----------|
 | 01-crashes-navigation | 2 | ~6 min | ~3 min |
 | 02-thread-safety | 2 | ~7 min | ~3.5 min |
+| 03-session-management | 1 | ~2 min | ~2 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-02 (2min), 02-01 (5min), 01-02 (2min), 01-01 (4min)
+- Last 5 plans: 03-01 (2min), 02-02 (2min), 02-01 (5min), 01-02 (2min), 01-01 (4min)
 - Trend: Fast execution
 
 *Updated after each plan completion*
@@ -67,6 +68,7 @@ Recent decisions affecting current work:
 - 02-02: Use nonisolated(unsafe) lazy var for URLSession in actors — URLSession is thread-safe, annotation is valid
 - 02-02: Use dedicated NetSnapshotStore actor (not nonisolated(unsafe)) for static dictionary — real isolation over compiler silence
 - 02-02: Move synchronous @MainActor clearCache() calls inside Task {} blocks when converting class clients to actors
+- 03-01: Store PiHole session tokens in Keychain (not UserDefaults) using per-instance keys scoped to config.id.uuidString — prevents cross-contamination between multiple Pi-hole instances
 
 ### Pending Todos
 
@@ -79,5 +81,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed 02-02-PLAN.md — ready for next plan
+Stopped at: Completed 03-01-PLAN.md — ready for next plan in phase 03-session-management
 Resume file: None

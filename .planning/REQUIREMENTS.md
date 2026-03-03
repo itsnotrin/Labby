@@ -30,11 +30,11 @@
 
 ### Session Management
 
-- [ ] **SESS-01**: PiHole session cache keys must be scoped per-instance to support multiple Pi-holes (PiHoleClient.swift:9-11)
+- [x] **SESS-01**: PiHole session cache keys must be scoped per-instance to support multiple Pi-holes (PiHoleClient.swift:9-11)
 - [ ] **SESS-02**: `ServiceManager.client(for:)` must reuse client instances to preserve cached auth tokens (ServiceManager.swift:40)
 - [ ] **SESS-03**: qBittorrent must cache session cookies across calls to avoid IP bans (QBittorrentClient.swift:30,116)
 - [ ] **SESS-04**: qBittorrent must retry authentication on session expiration (403 response) (QBittorrent.swift:138-141)
-- [ ] **SESS-05**: PiHole session tokens should be stored in Keychain instead of UserDefaults (PiHoleClient.swift:556-566)
+- [x] **SESS-05**: PiHole session tokens should be stored in Keychain instead of UserDefaults (PiHoleClient.swift:556-566)
 
 ### UI Correctness
 
@@ -91,11 +91,11 @@ None — this is a bug fix milestone.
 | MEM-02 | Phase 2 | Complete |
 | MEM-03 | Phase 2 | Complete |
 | MEM-04 | Phase 2 | Complete |
-| SESS-01 | Phase 3 | Pending |
+| SESS-01 | Phase 3 | Complete |
 | SESS-02 | Phase 3 | Pending |
 | SESS-03 | Phase 3 | Pending |
 | SESS-04 | Phase 3 | Pending |
-| SESS-05 | Phase 3 | Pending |
+| SESS-05 | Phase 3 | Complete |
 | API-01 | Phase 4 | Pending |
 | API-02 | Phase 4 | Pending |
 | API-03 | Phase 4 | Pending |
