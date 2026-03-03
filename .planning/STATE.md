@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-03T16:35:28Z"
+last_updated: "2026-03-03T16:39:00Z"
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
+  total_plans: 6
+  completed_plans: 6
 ---
 
 # Project State
@@ -23,11 +23,11 @@ See: .planning/PROJECT.md (updated 2026-03-03)
 ## Current Position
 
 Phase: 3 of 5 (Session Management)
-Plan: 1 of TBD in current phase
+Plan: 2 of TBD in current phase
 Status: In progress
-Last activity: 2026-03-03 — Completed plan 03-01 (PiHole session scoping and Keychain migration)
+Last activity: 2026-03-03 — Completed plan 03-02 (ServiceManager client caching, qBittorrent session reuse and 403 retry)
 
-Progress: [████░░░░░░] ~30%
+Progress: [████░░░░░░] ~35%
 
 ## Performance Metrics
 
@@ -42,10 +42,10 @@ Progress: [████░░░░░░] ~30%
 |-------|-------|-------|----------|
 | 01-crashes-navigation | 2 | ~6 min | ~3 min |
 | 02-thread-safety | 2 | ~7 min | ~3.5 min |
-| 03-session-management | 1 | ~2 min | ~2 min |
+| 03-session-management | 2 | ~7 min | ~3.5 min |
 
 **Recent Trend:**
-- Last 5 plans: 03-01 (2min), 02-02 (2min), 02-01 (5min), 01-02 (2min), 01-01 (4min)
+- Last 5 plans: 03-02 (5min), 03-01 (2min), 02-02 (2min), 02-01 (5min), 01-02 (2min)
 - Trend: Fast execution
 
 *Updated after each plan completion*
@@ -69,6 +69,9 @@ Recent decisions affecting current work:
 - 02-02: Use dedicated NetSnapshotStore actor (not nonisolated(unsafe)) for static dictionary — real isolation over compiler silence
 - 02-02: Move synchronous @MainActor clearCache() calls inside Task {} blocks when converting class clients to actors
 - 03-01: Store PiHole session tokens in Keychain (not UserDefaults) using per-instance keys scoped to config.id.uuidString — prevents cross-contamination between multiple Pi-hole instances
+- 03-02: Make session lazy var internal (not private) so QBittorrent.swift extension in separate file can reuse it — Swift private is file-scoped
+- 03-02: Layered cookie cache: _instanceCookie for fast per-instance access, static _cookieCache as cross-instance fallback
+- 03-02: performWithRetry takes cookie closure (not session+cookie) since session is always self.session
 
 ### Pending Todos
 
@@ -81,5 +84,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-03
-Stopped at: Completed 03-01-PLAN.md — ready for next plan in phase 03-session-management
+Stopped at: Completed 03-02-PLAN.md — ready for next plan in phase 03-session-management
 Resume file: None

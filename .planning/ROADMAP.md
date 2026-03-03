@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Crashes & Navigation** - Eliminate force-unwrap crashes and broken navigation patterns (completed 2026-03-03)
 - [x] **Phase 2: Thread Safety** - Resolve all race conditions and timer retain cycles (completed 2026-03-03)
-- [ ] **Phase 3: Session Management** - Fix session scoping, caching, and retry across all services
+- [x] **Phase 3: Session Management** - Fix session scoping, caching, and retry across all services (completed 2026-03-03)
 - [ ] **Phase 4: API & Data Correctness** - Fix broken API calls and inaccurate data computations
 - [ ] **Phase 5: UI & Performance** - Fix all UI inconsistencies, empty states, and performance regressions
 
@@ -56,7 +56,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. qBittorrent session cookies persist across API calls so the service is not IP-banned
   4. qBittorrent automatically re-authenticates and retries when it receives a 403 response
   5. PiHole session tokens are stored in Keychain, not UserDefaults
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 - [ ] 03-01-PLAN.md — Scope PiHole session keys per-instance and migrate session token storage from UserDefaults to Keychain
 - [ ] 03-02-PLAN.md — Add ServiceManager client instance caching, fix qBittorrent session cookie reuse, and add 403 retry logic
 
@@ -93,6 +93,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 |-------|----------------|--------|-----------|
 | 1. Crashes & Navigation | 2/2 | Complete   | 2026-03-03 |
 | 2. Thread Safety | 2/2 | Complete   | 2026-03-03 |
-| 3. Session Management | 1/2 | In progress | - |
+| 3. Session Management | 2/2 | Complete   | 2026-03-03 |
 | 4. API & Data Correctness | 0/TBD | Not started | - |
 | 5. UI & Performance | 0/TBD | Not started | - |
