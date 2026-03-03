@@ -1,6 +1,6 @@
 import Foundation
 
-final class PiHoleClient: ServiceClient {
+actor PiHoleClient: ServiceClient {
     let config: ServiceConfig
     private var sid: String?
     private var csrf: String?
@@ -10,7 +10,8 @@ final class PiHoleClient: ServiceClient {
     private let defaultsKeyCSRF = "PiHoleClient.csrf"
     private let defaultsKeySidExpiry = "PiHoleClient.sidExpiry"
 
-    private lazy var session: URLSession = {
+    // URLSession is internally thread-safe; nonisolated(unsafe) opts out of actor isolation.
+    nonisolated(unsafe) private lazy var session: URLSession = {
         if config.insecureSkipTLSVerify {
             return URLSession(
                 configuration: .ephemeral,
