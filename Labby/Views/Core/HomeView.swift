@@ -1506,6 +1506,9 @@ struct HomeView: View {
 
                 }
                 .navigationTitle("Add Widget")
+                #if os(iOS)
+                .navigationBarTitleDisplayMode(.inline)
+                #endif
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Cancel") { dismiss() }
@@ -1561,42 +1564,6 @@ struct HomeView: View {
                     if selectedServiceId == nil {
                         selectedServiceId = services.first?.id
                     }
-                }
-            }
-            .navigationTitle("Add Widget")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Add") {
-                        let newWidget = HomeWidget(
-                            serviceId: selectedServiceId!,
-                            size: size,
-                            row: 0,
-                            column: 0,
-                            titleOverride: title.isEmpty ? nil : title,
-                            metrics: {
-                                switch selectedConfig!.kind {
-                                case .proxmox:
-                                    return .proxmox(proxmoxSelection)
-                                case .jellyfin:
-                                    return .jellyfin(jellyfinSelection)
-                                case .qbittorrent:
-                                    return .qbittorrent(qbSelection)
-                                case .pihole:
-                                    return .pihole(piholeSelection)
-                                }
-                            }()
-                        )
-                        onAdd(newWidget)
-                        dismiss()
-                    }
-                    .disabled(!isSavable)
-                    .buttonStyle(.borderedProminent)
                 }
             }
         }
