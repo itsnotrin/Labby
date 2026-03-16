@@ -13,10 +13,6 @@ struct AddHomeView: View {
     @Binding var selectedHome: String
     @State private var newHomeName: String = ""
 
-    private enum DefaultsKeys {
-        static let homes = "homes"
-        static let selectedHome = "selectedHome"
-    }
 
     var body: some View {
         NavigationView {
@@ -40,7 +36,7 @@ struct AddHomeView: View {
                     Button("Save") {
                         saveNewHome()
                     }
-                    .disabled(newHomeName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(newHomeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }

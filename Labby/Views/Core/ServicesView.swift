@@ -13,8 +13,9 @@ struct ServicesView: View {
     @State private var testingServiceId: UUID?
     @State private var testResult: String?
     @State private var testError: String?
+    @State private var showTestAlert: Bool = false
     @State private var selectedHome: String =
-        UserDefaults.standard.string(forKey: "selectedHome") ?? "Default Home"
+        UserDefaults.standard.string(forKey: DefaultsKeys.selectedHome) ?? "Default Home"
     private var filteredServices: [ServiceConfig] {
         serviceManager.services.filter { $0.home == selectedHome }
     }
@@ -135,7 +136,7 @@ struct ServicesView: View {
             .sheet(isPresented: $isPresentingAdd) {
                 AddServiceView()
             }
-            .alert("Test Result", isPresented: .constant(testResult != nil || testError != nil)) {
+            .alert("Test Result", isPresented: $showTestAlert) {
                 Button("OK") {
                     testResult = nil
                     testError = nil
@@ -149,7 +150,7 @@ struct ServicesView: View {
             }
             .onAppear {
                 selectedHome =
-                    UserDefaults.standard.string(forKey: "selectedHome") ?? "Default Home"
+                    UserDefaults.standard.string(forKey: DefaultsKeys.selectedHome) ?? "Default Home"
             }
         }
     }
@@ -161,9 +162,11 @@ struct ServicesView: View {
             let info = try await client.testConnection()
             print("[Service Test] \(config.displayName): \(info)")
             testResult = info
+            showTestAlert = true
         } catch {
             print("[Service Test] \(config.displayName) error: \(error.localizedDescription)")
             testError = error.localizedDescription
+            showTestAlert = true
         }
         testingServiceId = nil
     }

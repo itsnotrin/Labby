@@ -83,9 +83,16 @@ extension QBittorrentClient {
 
     private func storeCookie(_ cookie: String) {
         Self._cookieLock.lock()
+        defer { Self._cookieLock.unlock() }
         Self._cookieCache[config.id] = cookie
-        Self._cookieLock.unlock()
         _instanceCookie = cookie
+    }
+
+    private func clearCachedCookie() {
+        Self._cookieLock.lock()
+        defer { Self._cookieLock.unlock() }
+        Self._cookieCache.removeValue(forKey: config.id)
+        _instanceCookie = nil
     }
 
     // Login and return "SID=..." cookie pair using the shared lazy session
@@ -106,8 +113,12 @@ extension QBittorrentClient {
             throw ServiceError.missingSecret
         }
 
-        let form =
-            "username=\(username.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? username)&password=\(password.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? password)"
+        var components = URLComponents()
+        components.queryItems = [
+            URLQueryItem(name: "username", value: username),
+            URLQueryItem(name: "password", value: password),
+        ]
+        let form = components.percentEncodedQuery ?? ""
         request.httpBody = form.data(using: .utf8)
 
         let (_, response) = try await session.data(for: request)
@@ -141,10 +152,7 @@ extension QBittorrentClient {
             return try await operation(cookie)
         } catch ServiceError.httpStatus(let code) where code == 403 {
             // Session expired -- clear cookie, re-authenticate, retry once
-            Self._cookieLock.lock()
-            Self._cookieCache.removeValue(forKey: config.id)
-            Self._cookieLock.unlock()
-            _instanceCookie = nil
+            clearCachedCookie()
             let newCookie = try await loginAndGetCookie()
             return try await operation(newCookie)
         }
@@ -435,7 +443,8 @@ final class QBittorrentViewModel: ObservableObject {
             let ul = max(0, ulKiBps) * 1024
             try await client.setGlobalDownloadLimit(dl)
             try await client.setGlobalUploadLimit(ul)
-            if let _ = toggleAltMode {
+            // Only toggle alt-mode when the desired state differs from the current state
+            if let desired = toggleAltMode, desired != (limits?.alternativeModeEnabled ?? false) {
                 try await client.toggleAlternativeSpeedLimits()
             }
             limits = try await client.globalLimits()

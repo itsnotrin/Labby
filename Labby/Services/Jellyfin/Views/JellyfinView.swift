@@ -203,7 +203,7 @@ struct JellyfinLibrary: Identifiable, Codable {
     }
 }
 
-struct JellyfinItem: Identifiable, Codable {
+nonisolated struct JellyfinItem: Identifiable, Codable {
     let id: String
     let name: String
     let overview: String?
@@ -261,7 +261,7 @@ struct JellyfinItem: Identifiable, Codable {
 extension JellyfinItem {
     /// Create a lightweight synthetic Season item. Optionally attach the parent `seriesId`
     /// and `parentId` so downstream fetches/fallbacks can use them (e.g. when season ids are synthetic).
-    static func syntheticSeason(id: String, name: String, index: Int, childCount: Int? = nil, seriesId: String? = nil, parentId: String? = nil) -> JellyfinItem {
+    nonisolated static func syntheticSeason(id: String, name: String, index: Int, childCount: Int? = nil, seriesId: String? = nil, parentId: String? = nil) -> JellyfinItem {
         return JellyfinItem(
             id: id,
             name: name,
@@ -292,7 +292,7 @@ extension JellyfinItem {
     /// Deduplicate an array of synthesized Season items by (indexNumber + normalized name).
     /// When duplicates are found the function merges sensible fields (e.g. childCount) and
     /// preserves the first-seen id/name/type while preferring non-nil metadata where possible.
-    static func dedupeSeasons(_ seasons: [JellyfinItem]) -> [JellyfinItem] {
+    nonisolated static func dedupeSeasons(_ seasons: [JellyfinItem]) -> [JellyfinItem] {
         var seen: [String: JellyfinItem] = [:]
         for s in seasons {
             let idx = s.indexNumber ?? -1
@@ -301,7 +301,14 @@ extension JellyfinItem {
 
             if let existing = seen[key] {
                 // merge child counts and prefer existing non-nil fields
-                let mergedChildCount = max(existing.childCount ?? 0, s.childCount ?? 0)
+                let mergedChildCount: Int? = {
+                    switch (existing.childCount, s.childCount) {
+                    case (.some(let a), .some(let b)): return max(a, b)
+                    case (.some(let a), .none): return a
+                    case (.none, .some(let b)): return b
+                    case (.none, .none): return nil
+                    }
+                }()
 
                 let merged = JellyfinItem(
                     id: existing.id,

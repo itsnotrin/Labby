@@ -17,9 +17,9 @@
 
 ### API Correctness
 
-- [ ] **API-01**: `PiHoleClient.toggleBlocking()` must use correct HTTP method (POST) with proper JSON body (PiHoleClient.swift:582-601)
-- [ ] **API-02**: `ProxmoxClient.createBackup()` must include `vmid` parameter in the request body (ProxmoxClient.swift:415-432)
-- [ ] **API-03**: `QBittorrent.applyLimits()` must only toggle alt-mode when the user explicitly requests it (QBittorrent.swift:429-431)
+- [x] **API-01**: `PiHoleClient.toggleBlocking()` must use correct HTTP method (POST) with proper JSON body (PiHoleClient.swift:582-601)
+- [x] **API-02**: `ProxmoxClient.createBackup()` must include `vmid` parameter in the request body (ProxmoxClient.swift:415-432)
+- [x] **API-03**: `QBittorrent.applyLimits()` must only toggle alt-mode when the user explicitly requests it (QBittorrent.swift:429-431)
 
 ### Memory & Thread Safety
 
@@ -38,32 +38,32 @@
 
 ### UI Correctness
 
-- [ ] **UI-01**: Alert bindings must use proper `@State` instead of `.constant()` computed expressions (HomeView.swift:140; AddServiceView.swift:226; ServicesView.swift:138)
-- [ ] **UI-02**: Empty-state text in `HomeContentView` must use computed `headerText`/`subheaderText` (HomeView.swift:605-608)
-- [ ] **UI-03**: `selectedHome` in `ServicesView` must stay synced with changes from other tabs (ServicesView.swift:16-17)
-- [ ] **UI-04**: `.refreshable` on `JellyfinSeriesDetailView` must be applied to a `List`, not `ScrollView` (JellyfinSeriesDetailView.swift:249-251)
-- [ ] **UI-05**: Duplicate Jellyfin person IDs must be deduplicated for `ForEach` (JellyfinMovieDetailView.swift:224; JellyfinSeriesDetailView.swift:150)
-- [ ] **UI-06**: `.searchable` must remain visible when filter yields empty results (JellyfinSeasonDetailView.swift:130; JellyfinLibraryView.swift:79)
-- [ ] **UI-07**: `dedupeSeasons` must preserve nil `childCount` instead of converting to 0 (JellyfinView.swift:304)
-- [ ] **UI-08**: `AddHomeView` trim character set must be consistent between disabled check and save (AddHomeView.swift:43,50)
+- [x] **UI-01**: Alert bindings must use proper `@State` instead of `.constant()` computed expressions (HomeView.swift:140; AddServiceView.swift:226; ServicesView.swift:138)
+- [x] **UI-02**: Empty-state text in `HomeContentView` must use computed `headerText`/`subheaderText` (HomeView.swift:605-608)
+- [x] **UI-03**: `selectedHome` in `ServicesView` must stay synced with changes from other tabs (ServicesView.swift:16-17)
+- [x] **UI-04**: `.refreshable` on `JellyfinSeriesDetailView` must be applied to a `List`, not `ScrollView` (JellyfinSeriesDetailView.swift:249-251)
+- [x] **UI-05**: Duplicate Jellyfin person IDs must be deduplicated for `ForEach` (JellyfinMovieDetailView.swift:224; JellyfinSeriesDetailView.swift:150)
+- [x] **UI-06**: `.searchable` must remain visible when filter yields empty results (JellyfinSeasonDetailView.swift:130; JellyfinLibraryView.swift:79)
+- [x] **UI-07**: `dedupeSeasons` must preserve nil `childCount` instead of converting to 0 (JellyfinView.swift:304)
+- [x] **UI-08**: `AddHomeView` trim character set must be consistent between disabled check and save (AddHomeView.swift:43,50)
 
 ### Data Accuracy
 
-- [ ] **DATA-01**: qBittorrent torrent state counting must use exact state matching instead of `.contains()` (QBittorrentClient.swift:183-186)
-- [ ] **DATA-02**: Jellyfin file size estimation must use video stream bitrate, not first stream (JellyfinSeasonDetailView.swift:656,696)
-- [ ] **DATA-03**: Proxmox `isUsingCachedData` must not rely solely on count comparison (Proxmox.swift:248-254)
-- [ ] **DATA-04**: Proxmox `mergeVMs` must remove VMs that no longer exist on the server (Proxmox.swift:350-373,926-949)
+- [x] **DATA-01**: qBittorrent torrent state counting must use exact state matching instead of `.contains()` (QBittorrentClient.swift:183-186)
+- [x] **DATA-02**: Jellyfin file size estimation must use video stream bitrate, not first stream (JellyfinSeasonDetailView.swift:656,696)
+- [x] **DATA-03**: Proxmox `isUsingCachedData` must not rely solely on count comparison (Proxmox.swift:248-254)
+- [x] **DATA-04**: Proxmox `mergeVMs` must remove VMs that no longer exist on the server (Proxmox.swift:350-373,926-949)
 
 ### Performance
 
-- [ ] **PERF-01**: qBittorrent must reuse `URLSession` instances instead of creating per-call (QBittorrent.swift:79-89)
-- [ ] **PERF-02**: Jellyfin date/byte formatters must be static/cached, not created per render (JellyfinSeasonDetailView.swift:530-537)
+- [x] **PERF-01**: qBittorrent must reuse `URLSession` instances instead of creating per-call (QBittorrent.swift:79-89)
+- [x] **PERF-02**: Jellyfin date/byte formatters must be static/cached, not created per render (JellyfinSeasonDetailView.swift:530-537)
 
 ### Other
 
-- [ ] **OTHER-01**: `PiHoleTopClient`/`PiHoleTopDomain` must use stable IDs across refreshes (PiHole.swift:9-19,21-31)
-- [ ] **OTHER-02**: `LabbyApp` must use `@StateObject` instead of `@ObservedObject` for singleton (LabbyApp.swift:12)
-- [ ] **OTHER-03**: `JellyfinClient.testConnection()` must not log auth token to console (JellyfinClient.swift:49)
+- [x] **OTHER-01**: `PiHoleTopClient`/`PiHoleTopDomain` must use stable IDs across refreshes (PiHole.swift:9-19,21-31)
+- [x] **OTHER-02**: `LabbyApp` must use `@StateObject` instead of `@ObservedObject` for singleton (LabbyApp.swift:12)
+- [x] **OTHER-03**: `JellyfinClient.testConnection()` must not log auth token to console (JellyfinClient.swift:49)
 
 ## v2 Requirements
 
@@ -96,26 +96,26 @@ None — this is a bug fix milestone.
 | SESS-03 | Phase 3 | Complete |
 | SESS-04 | Phase 3 | Complete |
 | SESS-05 | Phase 3 | Complete |
-| API-01 | Phase 4 | Pending |
-| API-02 | Phase 4 | Pending |
-| API-03 | Phase 4 | Pending |
-| DATA-01 | Phase 4 | Pending |
-| DATA-02 | Phase 4 | Pending |
-| DATA-03 | Phase 4 | Pending |
-| DATA-04 | Phase 4 | Pending |
-| UI-01 | Phase 5 | Pending |
-| UI-02 | Phase 5 | Pending |
-| UI-03 | Phase 5 | Pending |
-| UI-04 | Phase 5 | Pending |
-| UI-05 | Phase 5 | Pending |
-| UI-06 | Phase 5 | Pending |
-| UI-07 | Phase 5 | Pending |
-| UI-08 | Phase 5 | Pending |
-| PERF-01 | Phase 5 | Pending |
-| PERF-02 | Phase 5 | Pending |
-| OTHER-01 | Phase 5 | Pending |
-| OTHER-02 | Phase 5 | Pending |
-| OTHER-03 | Phase 5 | Pending |
+| API-01 | Phase 4 | Complete |
+| API-02 | Phase 4 | Complete |
+| API-03 | Phase 4 | Complete |
+| DATA-01 | Phase 4 | Complete |
+| DATA-02 | Phase 4 | Complete |
+| DATA-03 | Phase 4 | Complete |
+| DATA-04 | Phase 4 | Complete |
+| UI-01 | Phase 5 | Complete |
+| UI-02 | Phase 5 | Complete |
+| UI-03 | Phase 5 | Complete |
+| UI-04 | Phase 5 | Complete |
+| UI-05 | Phase 5 | Complete |
+| UI-06 | Phase 5 | Complete |
+| UI-07 | Phase 5 | Complete |
+| UI-08 | Phase 5 | Complete |
+| PERF-01 | Phase 5 | Complete |
+| PERF-02 | Phase 5 | Complete |
+| OTHER-01 | Phase 5 | Complete |
+| OTHER-02 | Phase 5 | Complete |
+| OTHER-03 | Phase 5 | Complete |
 
 **Coverage:**
 - v1 requirements: 33 total

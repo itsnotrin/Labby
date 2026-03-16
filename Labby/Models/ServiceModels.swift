@@ -7,6 +7,11 @@
 
 import Foundation
 
+enum DefaultsKeys {
+    static let homes = "homes"
+    static let selectedHome = "selectedHome"
+}
+
 enum ServiceKind: String, Codable, CaseIterable, Identifiable {
     case proxmox
     case jellyfin
@@ -103,7 +108,7 @@ struct ServiceConfig: Identifiable, Codable, Equatable {
     }
 
     private static func defaultHome() -> String {
-        UserDefaults.standard.string(forKey: "selectedHome") ?? "Default Home"
+        UserDefaults.standard.string(forKey: DefaultsKeys.selectedHome) ?? "Default Home"
     }
 
     init(
@@ -137,7 +142,7 @@ struct ServiceConfig: Identifiable, Codable, Equatable {
 }
 
 extension ServiceConfig {
-    func url(appending path: String, queryItems: [URLQueryItem]? = nil) throws -> URL {
+    nonisolated func url(appending path: String, queryItems: [URLQueryItem]? = nil) throws -> URL {
         guard var comps = URLComponents(string: baseURLString) else {
             throw ServiceError.invalidURL
         }

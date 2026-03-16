@@ -246,13 +246,13 @@ struct JellyfinSeriesDetailView: View {
                             }
                         }
                         .padding(.horizontal)
-                        .refreshable {
-                            await viewModel.refreshSeasons(config: config, seriesId: series.id)
-                        }
                     }
                 }
             }
             .padding(.bottom, 20)
+        }
+        .refreshable {
+            await viewModel.refreshSeasons(config: config, seriesId: series.id)
         }
         .navigationTitle("Series Details")
         #if os(iOS)
@@ -370,9 +370,10 @@ class JellyfinSeriesDetailViewModel: ObservableObject {
             let client = JellyfinClient(config: config)
             let detailedSeries = try await client.fetchItemDetails(itemId: seriesId)
 
-            // Parse cast
+            // Parse cast — deduplicate by id to avoid SwiftUI ForEach issues
             if let people = detailedSeries.people {
-                cast = people.filter { $0.type == "Actor" || $0.type == "Director" }
+                var seenIds = Set<String>()
+                cast = people.filter { ($0.type == "Actor" || $0.type == "Director") && seenIds.insert($0.id).inserted }
             }
 
             // Calculate series statistics would require additional API calls

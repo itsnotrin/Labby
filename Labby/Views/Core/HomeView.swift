@@ -18,13 +18,14 @@ struct HomeView: View {
     @State private var lastFetchByWidget: [UUID: Date] = [:]
 
     @State private var homes: [String] =
-        UserDefaults.standard.stringArray(forKey: "homes") ?? ["Default Home"]
+        UserDefaults.standard.stringArray(forKey: DefaultsKeys.homes) ?? ["Default Home"]
     @State private var selectedHome: String =
-        UserDefaults.standard.string(forKey: "selectedHome") ?? "Default Home"
+        UserDefaults.standard.string(forKey: DefaultsKeys.selectedHome) ?? "Default Home"
     @State private var isAddingHome: Bool = false
     @State private var testingServiceId: UUID?
     @State private var testResult: String?
     @State private var testError: String?
+    @State private var showTestAlert: Bool = false
     @State private var isEditingLayout: Bool = false
     @State private var editingWidget: HomeWidget?
     @State private var stats: [UUID: ServiceStatsPayload] = [:]
@@ -62,6 +63,8 @@ struct HomeView: View {
         NavigationView {
             HomeContentView(
                 filteredServicesIsEmpty: filteredServices.isEmpty,
+                emptyHeaderText: headerText,
+                emptySubheaderText: subheaderText,
                 displayWidgets: displayWidgets,
                 services: serviceManager.services,
                 selectedHome: selectedHome,
@@ -137,7 +140,7 @@ struct HomeView: View {
                 }
             )
         }
-        .alert("Test Result", isPresented: .constant(testResult != nil || testError != nil)) {
+        .alert("Test Result", isPresented: $showTestAlert) {
             Button("OK") {
                 testResult = nil
                 testError = nil
@@ -158,7 +161,7 @@ struct HomeView: View {
             ServicesView()
         }
         .onAppear {
-            if let stored = UserDefaults.standard.string(forKey: "selectedHome") {
+            if let stored = UserDefaults.standard.string(forKey: DefaultsKeys.selectedHome) {
                 selectedHome = stored
             }
             let serviceHomes = Set(serviceManager.services.map { $0.home })
@@ -168,11 +171,11 @@ struct HomeView: View {
             }
             if updated != homes {
                 homes = updated
-                UserDefaults.standard.set(updated, forKey: "homes")
+                UserDefaults.standard.set(updated, forKey: DefaultsKeys.homes)
             }
             if !homes.contains(selectedHome) {
                 selectedHome = homes.first ?? "Default Home"
-                UserDefaults.standard.set(selectedHome, forKey: "selectedHome")
+                UserDefaults.standard.set(selectedHome, forKey: DefaultsKeys.selectedHome)
             }
             // Ensure a layout exists for this home; create defaults if empty
             var layout = layoutStore.layout(for: selectedHome)
@@ -220,9 +223,11 @@ struct HomeView: View {
             let info = try await client.testConnection()
             print("[Service Test] \(config.displayName): \(info)")
             testResult = info
+            showTestAlert = true
         } catch {
             print("[Service Test] \(config.displayName) error: \(error.localizedDescription)")
             testError = error.localizedDescription
+            showTestAlert = true
         }
         testingServiceId = nil
     }
@@ -570,6 +575,8 @@ struct HomeView: View {
 
     struct HomeContentView: View {
         let filteredServicesIsEmpty: Bool
+        let emptyHeaderText: String
+        let emptySubheaderText: String
         let displayWidgets: [HomeWidget]
         let services: [ServiceConfig]
         let selectedHome: String
@@ -585,8 +592,8 @@ struct HomeView: View {
             ScrollView {
                 if filteredServicesIsEmpty {
                     EmptyStateView(
-                        header: "No Services Added",
-                        subheader: "Add services in the Services tab to see them here"
+                        header: emptyHeaderText,
+                        subheader: emptySubheaderText
                     )
                 } else {
                     HomeGridView(
@@ -1225,7 +1232,7 @@ struct HomeView: View {
                     ForEach(homes, id: \.self) { home in
                         Button(action: {
                             selectedHome = home
-                            UserDefaults.standard.set(home, forKey: "selectedHome")
+                            UserDefaults.standard.set(home, forKey: DefaultsKeys.selectedHome)
                         }) {
                             HStack {
                                 Text(home)

@@ -76,9 +76,9 @@ struct JellyfinLibraryView: View {
                 .refreshable {
                     await viewModel.refresh(config: config, libraryId: library.id)
                 }
-                .searchable(text: $searchText, prompt: "Search \(library.name)")
             }
         }
+        .searchable(text: $searchText, prompt: "Search \(library.name)")
         .navigationTitle(library.name)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.large)

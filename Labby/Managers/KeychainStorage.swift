@@ -8,11 +8,12 @@
 import Foundation
 import Security
 
-final class KeychainStorage {
+nonisolated final class KeychainStorage: @unchecked Sendable {
     static let shared = KeychainStorage()
     private init() {}
     private let serviceName: String = Bundle.main.bundleIdentifier ?? "Labby"
 
+    @discardableResult
     func saveSecret(_ data: Data, forKey key: String) -> Bool {
         let status = saveSecretStatus(data, forKey: key)
         return status == errSecSuccess

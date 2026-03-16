@@ -11,6 +11,7 @@ struct SettingsView: View {
     @ObservedObject private var appearanceManager = AppearanceManager.shared
     @AppStorage("showServiceStats") private var showServiceStats = true
     @AppStorage("autoRefreshInterval") private var autoRefreshInterval = 30.0
+    @AppStorage("hasCompletedSetup") private var hasCompletedSetup = false
 
     private let appearanceOptions = ["Light", "Dark"]
 
@@ -93,6 +94,25 @@ struct SettingsView: View {
                             Image(systemName: "info.circle.fill")
                         }
                     }
+
+                    Button {
+                        hasCompletedSetup = false
+                    } label: {
+                        Label {
+                            Text("Show Setup Guide")
+                        } icon: {
+                            Image(systemName: "hand.wave.fill")
+                        }
+                    }
+
+                    Link(destination: URL(string: "https://github.com/sponsors/itsnotrin")!) {
+                        Label {
+                            Text("Sponsor on GitHub")
+                        } icon: {
+                            Image(systemName: "heart.fill")
+                                .foregroundColor(.pink)
+                        }
+                    }
                 } header: {
                     Text("App Info")
                 }
@@ -126,6 +146,7 @@ struct SettingsView: View {
                     ) {
                         Button("Delete Everything", role: .destructive) {
                             ServiceManager.shared.resetAllData()
+                            hasCompletedSetup = false
                         }
                         Button("Cancel", role: .cancel) {}
                     } message: {

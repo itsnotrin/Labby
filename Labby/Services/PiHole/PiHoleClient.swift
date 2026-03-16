@@ -9,22 +9,27 @@ actor PiHoleClient: ServiceClient {
     private var keychainKeyCSRF: String { "PiHoleClient.\(config.id.uuidString).csrf" }
     private var keychainKeySidExpiry: String { "PiHoleClient.\(config.id.uuidString).sidExpiry" }
 
-    // URLSession is internally thread-safe; nonisolated(unsafe) opts out of actor isolation.
-    nonisolated(unsafe) private lazy var session: URLSession = {
+    private let session: URLSession
+
+    init(config: ServiceConfig) {
+        self.config = config
         if config.insecureSkipTLSVerify {
-            return URLSession(
+            self.session = URLSession(
                 configuration: .ephemeral,
                 delegate: InsecureSessionDelegate(),
                 delegateQueue: nil
             )
         } else {
-            return URLSession(configuration: .ephemeral)
+            self.session = URLSession(configuration: .ephemeral)
         }
-    }()
-
-    init(config: ServiceConfig) {
-        self.config = config
-        self.loadSessionCache()
+        let cached = Self.loadSessionCacheValues(
+            keySID: "PiHoleClient.\(config.id.uuidString).sid",
+            keyCSRF: "PiHoleClient.\(config.id.uuidString).csrf",
+            keySidExpiry: "PiHoleClient.\(config.id.uuidString).sidExpiry"
+        )
+        self.sid = cached.sid
+        self.csrf = cached.csrf
+        self.sidExpiry = cached.sidExpiry
     }
 
     func testConnection() async throws -> String {
@@ -535,7 +540,9 @@ actor PiHoleClient: ServiceClient {
         }
     }
     // Session cache helpers
-    private func loadSessionCache() {
+    private nonisolated static func loadSessionCacheValues(
+        keySID: String, keyCSRF: String, keySidExpiry: String
+    ) -> (sid: String?, csrf: String?, sidExpiry: Date?) {
         // Migration: move any existing UserDefaults values to Keychain, then delete from UserDefaults
         let legacyKeySID = "PiHoleClient.sid"
         let legacyKeyCSRF = "PiHoleClient.csrf"
@@ -544,43 +551,47 @@ actor PiHoleClient: ServiceClient {
 
         if let oldSID = defaults.string(forKey: legacyKeySID) {
             if let data = oldSID.data(using: .utf8) {
-                KeychainStorage.shared.saveSecret(data, forKey: keychainKeySID)
+                KeychainStorage.shared.saveSecret(data, forKey: keySID)
             }
             defaults.removeObject(forKey: legacyKeySID)
         }
         if let oldCSRF = defaults.string(forKey: legacyKeyCSRF) {
             if let data = oldCSRF.data(using: .utf8) {
-                KeychainStorage.shared.saveSecret(data, forKey: keychainKeyCSRF)
+                KeychainStorage.shared.saveSecret(data, forKey: keyCSRF)
             }
             defaults.removeObject(forKey: legacyKeyCSRF)
         }
         if let oldExpiry = defaults.object(forKey: legacyKeySidExpiry) as? TimeInterval {
             let str = String(oldExpiry)
             if let data = str.data(using: .utf8) {
-                KeychainStorage.shared.saveSecret(data, forKey: keychainKeySidExpiry)
+                KeychainStorage.shared.saveSecret(data, forKey: keySidExpiry)
             }
             defaults.removeObject(forKey: legacyKeySidExpiry)
         }
 
         // Load from Keychain
-        if let data = KeychainStorage.shared.loadSecret(forKey: keychainKeySID),
+        var sid: String?
+        var csrf: String?
+        var sidExpiry: Date?
+
+        if let data = KeychainStorage.shared.loadSecret(forKey: keySID),
            let savedSID = String(data: data, encoding: .utf8) {
-            self.sid = savedSID
+            sid = savedSID
         }
-        if let data = KeychainStorage.shared.loadSecret(forKey: keychainKeyCSRF),
+        if let data = KeychainStorage.shared.loadSecret(forKey: keyCSRF),
            let savedCSRF = String(data: data, encoding: .utf8) {
-            self.csrf = savedCSRF
+            csrf = savedCSRF
         }
-        if let data = KeychainStorage.shared.loadSecret(forKey: keychainKeySidExpiry),
+        if let data = KeychainStorage.shared.loadSecret(forKey: keySidExpiry),
            let str = String(data: data, encoding: .utf8),
            let ts = TimeInterval(str) {
             let date = Date(timeIntervalSince1970: ts)
             if date > Date() {
-                self.sidExpiry = date
-            } else {
-                clearSessionCache()
+                sidExpiry = date
             }
         }
+
+        return (sid, csrf, sidExpiry)
     }
     private func saveSessionCache() {
         if let sid = self.sid, let data = sid.data(using: .utf8) {
@@ -611,13 +622,17 @@ actor PiHoleClient: ServiceClient {
         let session = self.session
         try await ensureAuthenticated(session: session)
 
-        let endpoint = enable ? "api/dns/blocking" : "api/dns/blocking"
+        let endpoint = "api/dns/blocking"
         let url = try makeURL(path: endpoint)
 
         var request = URLRequest(url: url)
-        request.httpMethod = enable ? "POST" : "DELETE"
+        request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        // Pi-hole v6 API expects a JSON body with the blocking state
+        let body: [String: Any] = ["blocking": enable]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
 
         if let sid = sid {
             request.setValue(sid, forHTTPHeaderField: "X-FTL-SID")
@@ -945,7 +960,7 @@ private enum PiHoleHTTPError: LocalizedError {
 }
 
 // Decoding model for /api/auth (Pi-hole v6)
-private struct PiHoleAuthResponse: Codable {
+private nonisolated struct PiHoleAuthResponse: Codable {
     struct Session: Codable {
         let valid: Bool
         let totp: Bool?
@@ -966,7 +981,7 @@ private struct PiHoleAuthResponse: Codable {
 // A compact representation of Pi-hole stats consumed by Home widgets.
 extension PiHoleStats {
     // Convenience mapping from Pi-hole's summaryRaw payload
-    fileprivate init(raw: PiHoleSummaryRaw) {
+    nonisolated fileprivate init(raw: PiHoleSummaryRaw) {
         self.init(
             status: raw.status,
             domainsBeingBlocked: raw.domainsBeingBlocked ?? 0,
@@ -983,7 +998,7 @@ extension PiHoleStats {
 }
 
 // Decoding model for /admin/api.php?summaryRaw
-private struct PiHoleSummaryRaw: Codable {
+private nonisolated struct PiHoleSummaryRaw: Codable {
     // Common fields from /admin/api.php?summaryRaw
     // Names vary; we keep only the ones we need. Unknowns are ignored.
     let status: String?

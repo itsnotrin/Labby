@@ -39,21 +39,24 @@ actor ProxmoxClient: ServiceClient {
     // Cache expiry duration (5 minutes)
     private let cacheExpiryDuration: TimeInterval = 300
 
-    // URLSession is internally thread-safe; nonisolated(unsafe) opts out of actor isolation.
-    nonisolated(unsafe) private lazy var session: URLSession = {
+    // Tracks whether the last fetch for each resource type returned cached data
+    private(set) var lastNodesFetchWasCached: Bool = false
+    private(set) var lastVMsFetchWasCached: Bool = false
+    private(set) var lastStorageFetchWasCached: Bool = false
+
+    private let session: URLSession
+
+    init(config: ServiceConfig) {
+        self.config = config
         if config.insecureSkipTLSVerify {
-            return URLSession(
+            self.session = URLSession(
                 configuration: .ephemeral,
                 delegate: InsecureSessionDelegate(),
                 delegateQueue: nil
             )
         } else {
-            return URLSession(configuration: .ephemeral)
+            self.session = URLSession(configuration: .ephemeral)
         }
-    }()
-
-    init(config: ServiceConfig) {
-        self.config = config
     }
 
     private func makeRequest(
@@ -231,9 +234,11 @@ actor ProxmoxClient: ServiceClient {
            !cachedNodes.isEmpty {
             let age = Date().timeIntervalSince(timestamp)
             print("ProxmoxClient: Using cached nodes data (\(cachedNodes.count) nodes, age: \(Int(age))s)")
+            lastNodesFetchWasCached = true
             return cachedNodes
         }
 
+        lastNodesFetchWasCached = false
         print("ProxmoxClient: Fetching fresh nodes data from API (cache miss)")
         let request = try makeRequest(path: "/api2/json/nodes")
 
@@ -267,9 +272,11 @@ actor ProxmoxClient: ServiceClient {
            !cachedVMs.isEmpty {
             let age = Date().timeIntervalSince(timestamp)
             print("ProxmoxClient: Using cached VMs data (\(cachedVMs.count) VMs, age: \(Int(age))s)")
+            lastVMsFetchWasCached = true
             return cachedVMs
         }
 
+        lastVMsFetchWasCached = false
         print("ProxmoxClient: Fetching fresh VMs data from API (cache miss)")
         let request = try makeRequest(
             path: "/api2/json/cluster/resources",
@@ -306,9 +313,11 @@ actor ProxmoxClient: ServiceClient {
            !cachedStorage.isEmpty {
             let age = Date().timeIntervalSince(timestamp)
             print("ProxmoxClient: Using cached storage data (\(cachedStorage.count) pools, age: \(Int(age))s)")
+            lastStorageFetchWasCached = true
             return cachedStorage
         }
 
+        lastStorageFetchWasCached = false
         print("ProxmoxClient: Fetching fresh storage data from API (cache miss)")
         let request = try makeRequest(
             path: "/api2/json/cluster/resources",
@@ -429,10 +438,14 @@ actor ProxmoxClient: ServiceClient {
     }
 
     func createBackup(node: String, vmid: String) async throws {
-        let request = try makeRequest(
+        var request = try makeRequest(
             path: "/api2/json/nodes/\(node)/vzdump",
             method: "POST"
         )
+
+        // Include vmid in the POST body so the correct VM is backed up
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.httpBody = "vmid=\(vmid)".data(using: .utf8)
 
         do {
             let (_, response) = try await session.data(for: request)

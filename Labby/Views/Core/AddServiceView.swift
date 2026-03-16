@@ -11,9 +11,6 @@ struct AddServiceView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var serviceManager = ServiceManager.shared
 
-    private enum DefaultsKeys {
-        static let selectedHome = "selectedHome"
-    }
 
     @State private var displayName = ""
     @State private var selectedService: ServiceKind = .proxmox
@@ -31,6 +28,7 @@ struct AddServiceView: View {
     @State private var isTesting = false
     @State private var testResult: String?
     @State private var testError: String?
+    @State private var showTestAlert: Bool = false
     @State private var testAttempted = false
     @State private var testPassed = false
 
@@ -223,7 +221,7 @@ struct AddServiceView: View {
                     .animation(.spring(response: 0.3, dampingFraction: 0.6), value: testPassed)
                 }
             }
-            .alert("Test Result", isPresented: .constant(testResult != nil || testError != nil)) {
+            .alert("Test Result", isPresented: $showTestAlert) {
                 Button("OK") {
                     testResult = nil
                     testError = nil
@@ -391,9 +389,11 @@ struct AddServiceView: View {
             let result = try await client.testConnection()
             testResult = result
             testPassed = true
+            showTestAlert = true
         } catch {
             testError = error.localizedDescription
             testPassed = false
+            showTestAlert = true
         }
     }
 }

@@ -9,12 +9,18 @@ import SwiftUI
 
 @main
 struct LabbyApp: App {
-    @ObservedObject private var appearanceManager = AppearanceManager.shared
+    @StateObject private var appearanceManager = AppearanceManager.shared
+    @AppStorage("hasCompletedSetup") private var hasCompletedSetup = false
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .preferredColorScheme(appearanceManager.currentColorScheme)
+            if hasCompletedSetup {
+                ContentView()
+                    .preferredColorScheme(appearanceManager.currentColorScheme)
+            } else {
+                WelcomeView()
+                    .preferredColorScheme(appearanceManager.currentColorScheme)
+            }
         }
     }
 }

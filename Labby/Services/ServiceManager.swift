@@ -95,7 +95,7 @@ final class ServiceManager: ObservableObject {
         services.removeAll()
         UserDefaults.standard.removeObject(forKey: storageKey)
         HomeLayoutStore.shared.removeAllHomes()
-        UserDefaults.standard.removeObject(forKey: "homes")
-        UserDefaults.standard.removeObject(forKey: "selectedHome")
+        UserDefaults.standard.removeObject(forKey: DefaultsKeys.homes)
+        UserDefaults.standard.removeObject(forKey: DefaultsKeys.selectedHome)
     }
 }

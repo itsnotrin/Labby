@@ -453,9 +453,10 @@ class JellyfinMovieDetailViewModel: ObservableObject {
                 subtitleStreams = mediaStreams.filter { $0.type == "Subtitle" }
             }
 
-            // Parse cast
+            // Parse cast — deduplicate by id to avoid SwiftUI ForEach issues
             if let people = detailedItem.people {
-                cast = people.filter { $0.type == "Actor" || $0.type == "Director" }
+                var seenIds = Set<String>()
+                cast = people.filter { ($0.type == "Actor" || $0.type == "Director") && seenIds.insert($0.id).inserted }
             }
 
             // Get file info (would need additional API call in real implementation)

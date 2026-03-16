@@ -230,11 +230,6 @@ final class ProxmoxViewModel: ObservableObject {
         error = nil
 
         do {
-            // Check if we're using cached data
-            let beforeNodes = nodes.count
-            let beforeVMs = vms.count
-            let beforeStorage = storage.count
-
             // Fetch stats first for quick overview
             if case .proxmox(let proxmoxStats) = try await client.fetchStats() {
                 await MainActor.run {
@@ -244,14 +239,14 @@ final class ProxmoxViewModel: ObservableObject {
 
             await fetchDetailedData()
 
-            // Check if data came from cache
-            let afterNodes = nodes.count
-            let afterVMs = vms.count
-            let afterStorage = storage.count
-            let dataChanged = beforeNodes != afterNodes || beforeVMs != afterVMs || beforeStorage != afterStorage
+            // Check if data came from cache using the client's explicit flags
+            let nodesCached = await client.lastNodesFetchWasCached
+            let vmsCached = await client.lastVMsFetchWasCached
+            let storageCached = await client.lastStorageFetchWasCached
+            let wasCached = nodesCached && vmsCached && storageCached
 
             await MainActor.run {
-                self.isUsingCachedData = !dataChanged && beforeNodes > 0
+                self.isUsingCachedData = wasCached
             }
         } catch {
             print("ProxmoxViewModel: Error refreshing: \(error)")
@@ -349,28 +344,18 @@ final class ProxmoxViewModel: ObservableObject {
     }
 
     private func mergeVMs(existing: [ProxmoxVM], new: [ProxmoxVM]) -> [ProxmoxVM] {
-        var vmDict: [String: ProxmoxVM] = [:]
+        // Build lookup from existing VMs for identity preservation
+        let existingDict = Dictionary(uniqueKeysWithValues: existing.map { ($0.vmid, $0) })
 
-        // Start with existing VMs to preserve object identity
-        for vm in existing {
-            vmDict[vm.vmid] = vm
-        }
-
-        // Update with new data, preserving object identity where possible
-        for newVM in new {
-            if let existingVM = vmDict[newVM.vmid] {
-                // Update existing VM with new data if it has changed
-                if existingVM != newVM {
-                    vmDict[newVM.vmid] = newVM
-                }
-                // Otherwise keep existing object
-            } else {
-                // New VM, add it
-                vmDict[newVM.vmid] = newVM
+        // Start from new VMs only — this naturally excludes stale entries
+        let merged = new.map { newVM -> ProxmoxVM in
+            if let existingVM = existingDict[newVM.vmid], existingVM == newVM {
+                return existingVM  // Preserve identity if unchanged
             }
+            return newVM  // Use new data
         }
 
-        return Array(vmDict.values).sorted { $0.vmid < $1.vmid }
+        return merged.sorted { $0.vmid < $1.vmid }
     }
 }
 
@@ -923,28 +908,18 @@ struct ProxmoxDetailView: View {
         }
 
         private func mergeVMs(existing: [ProxmoxVM], new: [ProxmoxVM]) -> [ProxmoxVM] {
-            var vmDict: [String: ProxmoxVM] = [:]
+            // Build lookup from existing VMs for identity preservation
+            let existingDict = Dictionary(uniqueKeysWithValues: existing.map { ($0.vmid, $0) })
 
-            // Start with existing VMs to preserve object identity
-            for vm in existing {
-                vmDict[vm.vmid] = vm
-            }
-
-            // Update with new data, preserving object identity where possible
-            for newVM in new {
-                if let existingVM = vmDict[newVM.vmid] {
-                    // Update existing VM with new data if it has changed
-                    if existingVM != newVM {
-                        vmDict[newVM.vmid] = newVM
-                    }
-                    // Otherwise keep existing object
-                } else {
-                    // New VM, add it
-                    vmDict[newVM.vmid] = newVM
+            // Start from new VMs only — this naturally excludes stale entries
+            let merged = new.map { newVM -> ProxmoxVM in
+                if let existingVM = existingDict[newVM.vmid], existingVM == newVM {
+                    return existingVM  // Preserve identity if unchanged
                 }
+                return newVM  // Use new data
             }
 
-            return Array(vmDict.values).sorted { $0.vmid < $1.vmid }
+            return merged.sorted { $0.vmid < $1.vmid }
         }
 
         private func fetchStorage() async -> [ProxmoxStorage] {

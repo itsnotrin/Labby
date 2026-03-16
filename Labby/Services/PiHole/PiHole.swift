@@ -7,24 +7,22 @@ import Combine
 typealias PiHoleQueryLog = PiHoleQueryLogEntry
 
 struct PiHoleTopClient: Codable, Identifiable, Equatable {
-    let id: UUID
+    var id: String { name }
     let name: String
     let count: Int
 
     init(name: String, count: Int) {
-        self.id = UUID()
         self.name = name
         self.count = count
     }
 }
 
 struct PiHoleTopDomain: Codable, Identifiable, Equatable {
-    let id: UUID
+    var id: String { domain }
     let domain: String
     let count: Int
 
     init(domain: String, count: Int) {
-        self.id = UUID()
         self.domain = domain
         self.count = count
     }
@@ -62,6 +60,10 @@ final class PiHoleViewModel: ObservableObject {
     init(config: ServiceConfig) {
         self.config = config
         self.client = PiHoleClient(config: config)
+    }
+
+    deinit {
+        refreshTimer?.invalidate()
     }
 
     func refresh() async {
@@ -531,6 +533,10 @@ final class PiHoleDetailViewModel: ObservableObject {
     init(config: ServiceConfig) {
         self.config = config
         self.client = PiHoleClient(config: config)
+    }
+
+    deinit {
+        refreshTimer?.invalidate()
     }
 
     func refresh() async {

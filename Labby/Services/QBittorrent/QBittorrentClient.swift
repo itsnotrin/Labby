@@ -96,8 +96,12 @@ final class QBittorrentClient: ServiceClient {
                 throw ServiceError.missingSecret
             }
 
-            let formData =
-                "username=\(username.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? username)&password=\(password.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? password)"
+            var components = URLComponents()
+            components.queryItems = [
+                URLQueryItem(name: "username", value: username),
+                URLQueryItem(name: "password", value: password),
+            ]
+            let formData = components.percentEncodedQuery ?? ""
             request.httpBody = formData.data(using: .utf8)
 
             let (data, response) = try await session.data(for: request)
@@ -202,16 +206,17 @@ final class QBittorrentClient: ServiceClient {
             }
             let torrents = try JSONDecoder().decode([Torrent].self, from: data)
 
+            let downloadingStates: Set<String> = ["downloading", "forceddl", "metadl"]
+            let seedingStates: Set<String> = ["uploading", "forcedup"]
+
             let downloading = torrents.reduce(0) { count, t in
                 let s = (t.state ?? "").lowercased()
-                let isDownloading = s.contains("downloading") || s.contains("dl")
-                return count + (isDownloading ? 1 : 0)
+                return count + (downloadingStates.contains(s) ? 1 : 0)
             }
 
             let seeding = torrents.reduce(0) { count, t in
                 let s = (t.state ?? "").lowercased()
-                let isSeeding = s.contains("uploading") || s.contains("seeding") || s.contains("up")
-                return count + (isSeeding ? 1 : 0)
+                return count + (seedingStates.contains(s) ? 1 : 0)
             }
 
             let stats = QBittorrentStats(

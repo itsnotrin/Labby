@@ -163,7 +163,7 @@ struct ProxmoxStats: Codable, Equatable {
     public var netUpBps: Double
     public var netDownBps: Double
 
-    public init(
+    nonisolated public init(
         cpuUsagePercent: Double,
         memoryUsedBytes: Int64,
         memoryTotalBytes: Int64,
@@ -247,7 +247,7 @@ struct JellyfinStats: Codable, Equatable {
     public var tvShows: Int
     public var movies: Int
     public var users: Int
-    public init(tvShows: Int, movies: Int, users: Int = 0) {
+    nonisolated public init(tvShows: Int, movies: Int, users: Int = 0) {
         self.tvShows = tvShows
         self.movies = movies
         self.users = users
@@ -283,7 +283,7 @@ public struct PiHoleStats: Codable, Equatable {
     public var gravityLastUpdatedRelative: String?
     public var gravityLastUpdatedAbsolute: Int?
 
-    public init(
+    nonisolated public init(
         status: String?,
         domainsBeingBlocked: Int,
         dnsQueriesToday: Int,

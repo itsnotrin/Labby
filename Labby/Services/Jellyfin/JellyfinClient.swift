@@ -14,23 +14,11 @@ actor JellyfinClient: ServiceClient {
     private var authTokenTimestamp: Date?
     private let tokenExpiryDuration: TimeInterval = 3600 // 1 hour
 
-    // Reuse a single URLSession per client (respecting insecure TLS option).
-    // URLSession is internally thread-safe; nonisolated(unsafe) opts out of actor isolation.
-    nonisolated(unsafe) private lazy var session: URLSession = {
-        if config.insecureSkipTLSVerify {
-            return URLSession(
-                configuration: .ephemeral,
-                delegate: InsecureSessionDelegate(),
-                delegateQueue: nil
-            )
-        } else {
-            return URLSession(configuration: .ephemeral)
-        }
-    }()
+    private let session: URLSession
 
     // Stable device id for Jellyfin "MediaBrowser" header
-    private static let deviceIdKey = "JellyfinClient.deviceId"
-    private static func stableDeviceId() -> String {
+    private nonisolated static let deviceIdKey = "JellyfinClient.deviceId"
+    private nonisolated static func stableDeviceId() -> String {
         let defaults = UserDefaults.standard
         if let existing = defaults.string(forKey: deviceIdKey) {
             return existing
@@ -42,12 +30,21 @@ actor JellyfinClient: ServiceClient {
 
     init(config: ServiceConfig) {
         self.config = config
+        if config.insecureSkipTLSVerify {
+            self.session = URLSession(
+                configuration: .ephemeral,
+                delegate: InsecureSessionDelegate(),
+                delegateQueue: nil
+            )
+        } else {
+            self.session = URLSession(configuration: .ephemeral)
+        }
     }
 
     func testConnection() async throws -> String {
         print("[JellyfinClient] Starting authentication...")
         let authToken = try await authenticate()
-        print("[JellyfinClient] Authentication successful, token: \(authToken.prefix(10))...")
+        print("[JellyfinClient] Authentication successful")
 
         let url = try config.url(appending: "/System/Info")
         print("[JellyfinClient] Testing connection to: \(url)")

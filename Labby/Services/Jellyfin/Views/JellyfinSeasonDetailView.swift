@@ -8,6 +8,35 @@
 import SwiftUI
 import Combine
 
+// Static formatters to avoid re-creating per render (PERF-02)
+private enum JellyfinFormatters {
+    static let iso8601: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        return f
+    }()
+    static let dateMedium: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        return f
+    }()
+    static let dateLong: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .long
+        return f
+    }()
+    static let timeShort: DateFormatter = {
+        let f = DateFormatter()
+        f.timeStyle = .short
+        return f
+    }()
+    static let byteCount: ByteCountFormatter = {
+        let f = ByteCountFormatter()
+        f.allowedUnits = [.useGB, .useMB]
+        f.countStyle = .file
+        return f
+    }()
+}
+
 struct JellyfinSeasonDetailView: View {
     let config: ServiceConfig
     let season: JellyfinItem
@@ -127,9 +156,9 @@ struct JellyfinSeasonDetailView: View {
                     // Pull-to-refresh for episodes
                     await viewModel.refreshEpisodes(config: config, seasonId: season.id)
                 }
-                .searchable(text: $searchText, prompt: "Search episodes")
             }
         }
+        .searchable(text: $searchText, prompt: "Search episodes")
         .navigationTitle(season.name)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.large)
@@ -216,11 +245,8 @@ struct EpisodeRowView: View {
     }
 
     private func formatAirDate(_ dateString: String) -> String {
-        let formatter = ISO8601DateFormatter()
-        if let date = formatter.date(from: dateString) {
-            let displayFormatter = DateFormatter()
-            displayFormatter.dateStyle = .medium
-            return displayFormatter.string(from: date)
+        if let date = JellyfinFormatters.iso8601.date(from: dateString) {
+            return JellyfinFormatters.dateMedium.string(from: date)
         }
         return dateString
     }
@@ -530,10 +556,7 @@ struct JellyfinEpisodeDetailView: View {
     private func calculateFinishTime(_ ticks: Int64) -> String {
         let totalSeconds = ticks / 10_000_000
         let finishTime = Date().addingTimeInterval(TimeInterval(totalSeconds))
-
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        return formatter.string(from: finishTime)
+        return JellyfinFormatters.timeShort.string(from: finishTime)
     }
 
     private func formatResolution(_ stream: JellyfinMediaStream) -> String {
@@ -552,18 +575,12 @@ struct JellyfinEpisodeDetailView: View {
     }
 
     private func formatFileSize(_ bytes: Int64) -> String {
-        let formatter = ByteCountFormatter()
-        formatter.allowedUnits = [.useGB, .useMB]
-        formatter.countStyle = .file
-        return formatter.string(fromByteCount: bytes)
+        return JellyfinFormatters.byteCount.string(fromByteCount: bytes)
     }
 
     private func formatAirDate(_ dateString: String) -> String {
-        let formatter = ISO8601DateFormatter()
-        if let date = formatter.date(from: dateString) {
-            let displayFormatter = DateFormatter()
-            displayFormatter.dateStyle = .long
-            return displayFormatter.string(from: date)
+        if let date = JellyfinFormatters.iso8601.date(from: dateString) {
+            return JellyfinFormatters.dateLong.string(from: date)
         }
         return dateString
     }
@@ -653,10 +670,10 @@ class JellyfinEpisodeDetailViewModel: ObservableObject {
                     videoStream = mediaStreams.first { $0.type == "Video" }
                     audioStreams = mediaStreams.filter { $0.type == "Audio" }
                     subtitleStreams = mediaStreams.filter { $0.type == "Subtitle" }
-                    if let first = mediaStreams.first {
-                        // Estimate file size if bitrate and runtime are available.
+                    if let vid = videoStream {
+                        // Estimate file size using video stream bitrate and runtime.
                         // Bitrate is typically in bits/sec; runtime is in ticks (10_000_000 ticks = 1s).
-                        if let bitRate = first.bitRate, let runtimeTicks = detailedItem.runTimeTicks {
+                        if let bitRate = vid.bitRate, let runtimeTicks = detailedItem.runTimeTicks {
                             let seconds = Double(runtimeTicks) / 10_000_000.0
                             let bytesEstimate = Int64((Double(bitRate) * seconds) / 8.0)
                             fileSize = bytesEstimate
@@ -691,19 +708,14 @@ class JellyfinEpisodeDetailViewModel: ObservableObject {
                 subtitleStreams = mediaStreams.filter { $0.type == "Subtitle" }
             }
 
-            // File size
-            if let mediaStreams = detailedItem.mediaStreams {
-                if let first = mediaStreams.first {
-                    // Estimate file size if bitrate and runtime are available.
-                    // Bitrate is typically in bits/sec; runtime is in ticks (10_000_000 ticks = 1s).
-                    if let bitRate = first.bitRate, let runtimeTicks = detailedItem.runTimeTicks {
-                        let seconds = Double(runtimeTicks) / 10_000_000.0
-                        let bytesEstimate = Int64((Double(bitRate) * seconds) / 8.0)
-                        fileSize = bytesEstimate
-                    } else {
-                        // No reliable size data available
-                        fileSize = nil
-                    }
+            // File size — use video stream bitrate (not first stream which may be audio/subtitle)
+            if let vid = videoStream {
+                if let bitRate = vid.bitRate, let runtimeTicks = detailedItem.runTimeTicks {
+                    let seconds = Double(runtimeTicks) / 10_000_000.0
+                    let bytesEstimate = Int64((Double(bitRate) * seconds) / 8.0)
+                    fileSize = bytesEstimate
+                } else {
+                    fileSize = nil
                 }
             }
 
